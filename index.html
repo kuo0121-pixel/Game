@@ -414,6 +414,21 @@
     { kind: "spiker", name: "大尖刺怪", w: 70, h: 52 }
   ];
 
+  // 柏宇's ride evolves with distance (unlocked around milestones)
+  var MOUNTS = [
+    { id: "crawl",   name: "爬行",   at: 0,     emoji: "👶" },
+    { id: "walk",    name: "走路",   at: 200,   emoji: "🚶" },
+    { id: "walker",  name: "學步車", at: 500,   emoji: "🛒" },
+    { id: "bike",    name: "腳踏車", at: 1018,  emoji: "🚲" },
+    { id: "moto",    name: "摩托車", at: 1800,  emoji: "🏍️" },
+    { id: "car",     name: "汽車",   at: 2800,  emoji: "🚗" },
+    { id: "yacht",   name: "遊艇",   at: 4200,  emoji: "🛥️" },
+    { id: "plane",   name: "飛機",   at: 6000,  emoji: "✈️" },
+    { id: "shuttle", name: "太空梭", at: 8500,  emoji: "🚀" },
+    { id: "ufo",     name: "飛碟",   at: 12000, emoji: "🛸" },
+    { id: "cloud",   name: "筋斗雲", at: 17000, emoji: "☁️" }
+  ];
+
   // Encouraging milestone messages (cute & warm)
   var MILESTONES = [
     { d: 200,  msg: "柏宇爬得好快！👏" },
@@ -432,7 +447,7 @@
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
   var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer;
   var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel;
-  var birthdayBurst, runCompleted;
+  var birthdayBurst, runCompleted, mountIdx;
 
   best = parseInt(localStorage.getItem("baiyu_best") || "0", 10) || 0;
 
@@ -554,7 +569,7 @@
     spawnTimer = 1.2; itemTimer = 0.7; invuln = 0; milestoneIdx = 0;
     combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9;
     coyote = 0; jumpBuf = 0; hitstop = 0; scoreShown = 0; segTimer = 1.0; segLevel = 0;
-    birthdayBurst = 0; runCompleted = [];
+    birthdayBurst = 0; runCompleted = []; mountIdx = 0;
     coolMode = isBirthday;   // every run is a party on the real birthday
     pickFace();
     updateHUD();
@@ -910,6 +925,18 @@
       for (var cf = 0; cf < 30; cf++) { var ca = Math.random() * 6.28, cs = 90 + Math.random() * 170; particles.push({ x: W / 2, y: 60, vx: Math.cos(ca) * cs, vy: Math.sin(ca) * cs - 70, g: 360, life: 1.2, confetti: true, color: cfc[(Math.random() * 5) | 0] }); }
       if (ms.msg.indexOf("生日") >= 0) { birthdayParty(); }
       milestoneIdx++;
+    }
+
+    // ride evolution — bump 柏宇 to a new mount as distance climbs
+    var mi = 0;
+    for (var mk = MOUNTS.length - 1; mk >= 0; mk--) { if (dist >= MOUNTS[mk].at) { mi = mk; break; } }
+    if (mi > mountIdx) {
+      mountIdx = mi;
+      var mo = MOUNTS[mountIdx];
+      showToast("🎉 升級坐騎：" + mo.name + " " + mo.emoji);
+      sfxFanfare();
+      var mc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3"];
+      for (var mf = 0; mf < 24; mf++) { var ma = Math.random() * 6.28, ms = 90 + Math.random() * 150; particles.push({ x: baby.x, y: baby.y - 60, vx: Math.cos(ma) * ms, vy: Math.sin(ma) * ms - 60, g: 340, life: 1.1, confetti: true, color: mc[(Math.random() * 5) | 0] }); }
     }
 
     // mission progress + birthday party visuals
@@ -1441,103 +1468,157 @@
   }
 
   // ---------- Cute baby (canvas vector) ----------
+  // head anchor (local mirrored space) per mount; head radius 42 throughout
+  var HEAD = {
+    crawl: { hx: -26, hy: -54 }, walk: { hx: -2, hy: -80 }, walker: { hx: -2, hy: -78 },
+    bike: { hx: -4, hy: -82 }, moto: { hx: -4, hy: -76 }, car: { hx: 0, hy: -70 },
+    yacht: { hx: -2, hy: -82 }, plane: { hx: -6, hy: -60 }, shuttle: { hx: 0, hy: -92 },
+    ufo: { hx: 0, hy: -78 }, cloud: { hx: -2, hy: -70 }
+  };
   function drawBaby() {
     var x = baby.x, y = baby.y;
     var blink = (invuln > 0 && Math.floor(invuln * 12) % 2 === 0);
+    var mid = MOUNTS[mountIdx] ? MOUNTS[mountIdx].id : "crawl";
+    var flying = (mid === "plane" || mid === "shuttle" || mid === "ufo" || mid === "cloud");
 
     // soft drop shadow on the ground
-    ctx.fillStyle = "rgba(40,30,15,0.18)";
+    ctx.fillStyle = "rgba(40,30,15," + (flying ? 0.1 : 0.18) + ")";
     var shScale = baby.onGround ? 1 : 0.7;
     ctx.beginPath();
-    ctx.ellipse(x, GROUND_Y + 6, 44 * shScale, 8 * shScale, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, GROUND_Y + 6, (flying ? 34 : 46) * shScale, 8 * shScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // crawl dust puffs
-    if (state === "playing" && baby.onGround && Math.random() < 0.3) {
+    // ground dust only when actually crawling/walking
+    if (state === "playing" && baby.onGround && (mid === "crawl" || mid === "walk") && Math.random() < 0.3) {
       particles.push({ x: x - 22, y: GROUND_Y + 2, vx: -(40 + Math.random() * 30), vy: -15 - Math.random() * 20, life: 0.4, color: "rgba(225,205,170,0.9)", sz: 3 });
     }
 
     ctx.save();
     if (blink) ctx.globalAlpha = 0.55;
     var swing = Math.sin(baby.anim) * 7;
-    // stretch tall+thin while rising, squash short+wide on landing impact
     var stretch = baby.onGround ? 0 : Math.max(-0.16, Math.min(0.16, -baby.vy / 4600));
     var sy = (1 - baby.squash * 0.4) * (1 + stretch);
     var sx = (1 + baby.squash * 0.3) * (1 - stretch * 0.6);
     ctx.translate(x, y);
-    ctx.scale(-sx, sy);      // face right (direction of travel) + squash/stretch
+    ctx.scale(-sx, sy);      // local +x = screen-left; "front" of a vehicle = local -x
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
 
-    // back legs (behind body)
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "#f0b88c"; ctx.lineWidth = 14;
-    leg(16, -10, -swing);
-    ctx.strokeStyle = "#f6c9a0";
-    leg(22, -10, swing);
-
-    // chunky onesie body
-    ctx.fillStyle = "#5fb3c9";
-    roundRectPath(-36, -30, 72, 34, 17); ctx.fill();
-    ctx.fillStyle = "#8fd6e8";
-    roundRectPath(-36, -36, 72, 34, 17); ctx.fill();
-    // belly highlight + buttons
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.beginPath(); ctx.ellipse(2, -20, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#ffd23f";
-    ctx.beginPath(); ctx.arc(-6, -13, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(8, -13, 3, 0, Math.PI * 2); ctx.fill();
-
-    // front arms reaching forward
-    ctx.strokeStyle = "#f6c9a0"; ctx.lineWidth = 13;
-    arm(-28, -22, 6 + swing);
-    arm(-20, -22, 6 - swing);
-
-    // head — photo of 柏宇, slim ring, anchored on the body
-    var hr = 42;
-    var hx = -26, hy = -54 + Math.sin(baby.anim) * 1.5;
-    if (currentFace && currentFace.complete) {
-      // neck/overlap shadow into torso
-      ctx.fillStyle = "rgba(40,30,15,0.10)";
-      ctx.beginPath(); ctx.ellipse(hx + 4, hy + hr - 2, hr * 0.7, 6, 0, 0, Math.PI * 2); ctx.fill();
-      // slim white ring
-      ctx.fillStyle = "#fff";
-      ctx.beginPath(); ctx.arc(hx, hy, hr + 3, 0, Math.PI * 2); ctx.fill();
-      // photo (un-mirror so the face isn't flipped by the body's facing)
-      ctx.save();
-      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.clip();
-      ctx.translate(hx, hy); ctx.scale(-1, 1);
-      ctx.drawImage(currentFace, -hr, -hr, hr * 2, hr * 2);
-      ctx.restore();
-      // thin gold accent
-      ctx.lineWidth = 2.5; ctx.strokeStyle = "#ffcf33";
-      ctx.beginPath(); ctx.arc(hx, hy, hr + 1.5, 0, Math.PI * 2); ctx.stroke();
-      if (coolMode) {
-        ctx.fillStyle = "#222";
-        ctx.fillRect(hx - 20, hy - 6, 16, 11);
-        ctx.fillRect(hx + 4, hy - 6, 16, 11);
-        ctx.fillRect(hx - 4, hy - 2, 8, 3);
-      }
-    } else {
-      ctx.fillStyle = "#fbd7b3";
-      ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "rgba(244,138,138,0.45)";
-      ctx.beginPath(); ctx.arc(hx - 12, hy + 6, 5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#4a3a2a";
-      ctx.beginPath(); ctx.arc(hx - 9, hy - 3, 3.4, 0, Math.PI * 2); ctx.fill();
-    }
-
+    if (mid === "crawl") drawCrawl(swing); else drawMount(mid, swing);
+    var h = HEAD[mid] || HEAD.crawl;
+    drawHeroHead(h.hx, h.hy + Math.sin(baby.anim) * 1.5, 42);
     ctx.restore();
 
-    function leg(ox, oy, ph) {
-      ctx.beginPath();
-      ctx.moveTo(ox, oy);
-      ctx.lineTo(ox + 12, oy + 14 + ph * 0.5);
-      ctx.stroke();
+    // ---- hero photo head (drawn in the mirrored space; photo un-mirrored) ----
+    function drawHeroHead(hx, hy, hr) {
+      if (currentFace && currentFace.complete) {
+        ctx.fillStyle = "rgba(40,30,15,0.10)";
+        ctx.beginPath(); ctx.ellipse(hx + 4, hy + hr - 2, hr * 0.7, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.beginPath(); ctx.arc(hx, hy, hr + 3, 0, Math.PI * 2); ctx.fill();
+        ctx.save();
+        ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.clip();
+        ctx.translate(hx, hy); ctx.scale(-1, 1);
+        ctx.drawImage(currentFace, -hr, -hr, hr * 2, hr * 2);
+        ctx.restore();
+        ctx.lineWidth = 2.5; ctx.strokeStyle = "#ffcf33";
+        ctx.beginPath(); ctx.arc(hx, hy, hr + 1.5, 0, Math.PI * 2); ctx.stroke();
+        if (coolMode) {
+          ctx.fillStyle = "#222";
+          ctx.fillRect(hx - 20, hy - 6, 16, 11); ctx.fillRect(hx + 4, hy - 6, 16, 11); ctx.fillRect(hx - 4, hy - 2, 8, 3);
+        }
+      } else {
+        ctx.fillStyle = "#fbd7b3"; ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#4a3a2a"; ctx.beginPath(); ctx.arc(hx - 9, hy - 3, 3.4, 0, Math.PI * 2); ctx.fill();
+      }
     }
-    function arm(ox, oy, ph) {
-      ctx.beginPath();
-      ctx.moveTo(ox, oy);
-      ctx.lineTo(ox - 8, oy + 18 + ph);
-      ctx.stroke();
+    // ---- original crawling baby ----
+    function drawCrawl(swing) {
+      ctx.strokeStyle = "#f0b88c"; ctx.lineWidth = 14; leg(16, -10, -swing);
+      ctx.strokeStyle = "#f6c9a0"; leg(22, -10, swing);
+      ctx.fillStyle = "#5fb3c9"; roundRectPath(-36, -30, 72, 34, 17); ctx.fill();
+      ctx.fillStyle = "#8fd6e8"; roundRectPath(-36, -36, 72, 34, 17); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.beginPath(); ctx.ellipse(2, -20, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffd23f"; ctx.beginPath(); ctx.arc(-6, -13, 3, 0, 6.28); ctx.arc(8, -13, 3, 0, 6.28); ctx.fill();
+      ctx.strokeStyle = "#f6c9a0"; ctx.lineWidth = 13; arm(-28, -22, 6 + swing); arm(-20, -22, 6 - swing);
+    }
+    function leg(ox, oy, ph) { ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + 12, oy + 14 + ph * 0.5); ctx.stroke(); }
+    function arm(ox, oy, ph) { ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox - 8, oy + 18 + ph); ctx.stroke(); }
+    function wheel(wx, rad) {
+      ctx.fillStyle = "#2f343d"; ctx.beginPath(); ctx.arc(wx, -rad, rad, 0, 6.28); ctx.fill();
+      ctx.fillStyle = "#aab2bb"; ctx.beginPath(); ctx.arc(wx, -rad, rad * 0.42, 0, 6.28); ctx.fill();
+    }
+    function miniBody(cx, topY, col) {
+      ctx.fillStyle = col || "#8fd6e8"; roundRectPath(cx - 13, topY, 26, 26, 11); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.ellipse(cx, topY + 9, 7, 5, 0, 0, 6.28); ctx.fill();
+    }
+    // ---- all the rideable mounts ----
+    function drawMount(id, swing) {
+      if (id === "walk") {
+        ctx.strokeStyle = "#f0b88c"; ctx.lineWidth = 12;
+        ctx.beginPath(); ctx.moveTo(-3, -30); ctx.lineTo(-3 + swing * 0.5, -2); ctx.stroke();
+        ctx.strokeStyle = "#f6c9a0";
+        ctx.beginPath(); ctx.moveTo(4, -30); ctx.lineTo(4 - swing * 0.5, -2); ctx.stroke();
+        ctx.fillStyle = "#8fd6e8"; roundRectPath(-16, -56, 32, 32, 13); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.ellipse(0, -40, 8, 6, 0, 0, 6.28); ctx.fill();
+        ctx.strokeStyle = "#f6c9a0"; ctx.lineWidth = 10;
+        ctx.beginPath(); ctx.moveTo(-12, -48); ctx.lineTo(-18, -32 + swing); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(12, -48); ctx.lineTo(18, -32 - swing); ctx.stroke();
+      } else if (id === "walker") {
+        wheel(-16, 7); wheel(16, 7); wheel(0, 6);
+        ctx.fillStyle = "#5fb3c9"; roundRectPath(-30, -30, 60, 16, 8); ctx.fill();   // tray
+        ctx.strokeStyle = "#bfe3f0"; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(0, -30, 26, 8, 0, Math.PI, 0); ctx.stroke();
+        miniBody(0, -52, "#ffd23f");
+      } else if (id === "bike") {
+        wheel(-20, 13); wheel(20, 13);
+        ctx.strokeStyle = "#e0566b"; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(-20, -13); ctx.lineTo(2, -13); ctx.lineTo(10, -34); ctx.lineTo(20, -13); ctx.moveTo(2, -13); ctx.lineTo(-6, -34); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-6, -34); ctx.lineTo(-16, -38); ctx.stroke();   // handlebar (front)
+        miniBody(2, -56);
+      } else if (id === "moto") {
+        wheel(-20, 14); wheel(20, 14);
+        ctx.fillStyle = "#e23b3b"; roundRectPath(-22, -34, 44, 16, 8); ctx.fill();
+        ctx.fillStyle = "#b32a2a"; roundRectPath(8, -40, 16, 10, 4); ctx.fill();
+        ctx.strokeStyle = "#444"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-14, -34); ctx.lineTo(-22, -42); ctx.stroke();
+        miniBody(0, -56);
+      } else if (id === "car") {
+        wheel(-20, 12); wheel(20, 12);
+        ctx.fillStyle = "#ff8a3c"; roundRectPath(-32, -34, 64, 22, 10); ctx.fill();
+        ctx.fillStyle = "#ffd23f"; roundRectPath(-16, -50, 34, 20, 9); ctx.fill();  // cabin
+        ctx.fillStyle = "#cfeeff"; roundRectPath(-12, -47, 16, 13, 5); ctx.fill();  // window
+        ctx.fillStyle = "#fff4cc"; ctx.beginPath(); ctx.arc(-30, -24, 4, 0, 6.28); ctx.fill();  // headlight (front)
+      } else if (id === "yacht") {
+        ctx.strokeStyle = "rgba(120,200,240,0.7)"; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(-46, -2); ctx.quadraticCurveTo(0, 6, 46, -2); ctx.stroke();  // water
+        ctx.fillStyle = "#fafdff"; ctx.beginPath(); ctx.moveTo(-40, -16); ctx.lineTo(40, -16); ctx.lineTo(28, -2); ctx.lineTo(-28, -2); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#5fb3c9"; roundRectPath(-20, -40, 40, 24, 8); ctx.fill();  // cabin
+        ctx.fillStyle = "#cfeeff"; ctx.beginPath(); ctx.arc(-8, -28, 5, 0, 6.28); ctx.arc(8, -28, 5, 0, 6.28); ctx.fill();
+        ctx.fillStyle = "#e0566b"; ctx.fillRect(-2, -56, 3, 16); ctx.beginPath(); ctx.moveTo(1, -56); ctx.lineTo(14, -50); ctx.lineTo(1, -44); ctx.closePath(); ctx.fill();
+      } else if (id === "plane") {
+        ctx.fillStyle = "#eef3f7"; roundRectPath(-40, -52, 84, 26, 13); ctx.fill();   // fuselage
+        ctx.fillStyle = "#9fc7e0"; ctx.beginPath(); ctx.moveTo(6, -40); ctx.lineTo(34, -16); ctx.lineTo(2, -28); ctx.closePath(); ctx.fill(); // wing
+        ctx.beginPath(); ctx.moveTo(38, -52); ctx.lineTo(46, -64); ctx.lineTo(34, -50); ctx.closePath(); ctx.fill(); // tail
+        ctx.fillStyle = "#cfeeff"; ctx.beginPath(); ctx.arc(-22, -40, 7, 0, 6.28); ctx.fill();  // cockpit window
+        ctx.save(); ctx.translate(-40, -40); ctx.rotate(world.scroll * 0.4);   // propeller (front)
+        ctx.fillStyle = "#444"; ctx.fillRect(-2, -12, 4, 24); ctx.fillRect(-12, -2, 24, 4); ctx.restore();
+      } else if (id === "shuttle") {
+        ctx.fillStyle = "#ff7a3c";   // flames
+        for (var fl = 0; fl < 3; fl++) { ctx.beginPath(); ctx.moveTo(-8 + fl * 8, -8); ctx.lineTo(-4 + fl * 8, 6 + Math.random() * 6); ctx.lineTo(0 + fl * 8, -8); ctx.closePath(); ctx.fill(); }
+        ctx.fillStyle = "#fafdff"; roundRectPath(-14, -86, 28, 80, 14); ctx.fill();  // body
+        ctx.fillStyle = "#e23b3b"; ctx.beginPath(); ctx.moveTo(-14, -86); ctx.quadraticCurveTo(0, -108, 14, -86); ctx.closePath(); ctx.fill(); // nose
+        ctx.beginPath(); ctx.moveTo(-14, -20); ctx.lineTo(-26, -2); ctx.lineTo(-14, -8); ctx.closePath(); ctx.moveTo(14, -20); ctx.lineTo(26, -2); ctx.lineTo(14, -8); ctx.closePath(); ctx.fill(); // fins
+      } else if (id === "ufo") {
+        ctx.fillStyle = "rgba(120,255,180,0.25)"; ctx.beginPath(); ctx.moveTo(-10, -52); ctx.lineTo(-30, 6); ctx.lineTo(30, 6); ctx.lineTo(10, -52); ctx.closePath(); ctx.fill(); // tractor beam
+        ctx.fillStyle = "#9aa6b2"; ctx.beginPath(); ctx.ellipse(0, -52, 46, 16, 0, 0, 6.28); ctx.fill();  // saucer
+        ctx.fillStyle = "#c7d2dc"; ctx.beginPath(); ctx.ellipse(0, -56, 46, 12, 0, 0, 6.28); ctx.fill();
+        var uc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc"];
+        for (var u = 0; u < 5; u++) { ctx.fillStyle = uc[u % 4]; ctx.beginPath(); ctx.arc(-32 + u * 16, -50, 3, 0, 6.28); ctx.fill(); }
+      } else if (id === "cloud") {
+        ctx.fillStyle = "#ffe39a";
+        ctx.beginPath();
+        ctx.arc(-26, -28, 16, 0, 6.28); ctx.arc(-4, -36, 20, 0, 6.28); ctx.arc(22, -28, 16, 0, 6.28); ctx.arc(6, -22, 18, 0, 6.28); ctx.arc(-14, -22, 16, 0, 6.28);
+        ctx.fill();
+        ctx.fillStyle = "#ffd166"; ctx.beginPath(); ctx.ellipse(0, -18, 34, 8, 0, 0, 6.28); ctx.fill();
+      }
     }
   }
 
