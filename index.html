@@ -269,6 +269,11 @@
   // ---------- Audio (tiny WebAudio blips) ----------
   var muted = false, audioCtx = null;
   function ensureAudio() {
+    // On iPhone, plain WebAudio is routed to the "ambient" category and is
+    // SILENCED by the hardware mute/ringer switch. Marking the session as
+    // "playback" makes it behave like music/video and ignore that switch,
+    // so the game has sound even when the phone is on silent.
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
     if (!audioCtx) {
       try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
     }
