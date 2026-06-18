@@ -50,6 +50,17 @@
   }
   .subtitle { font-size: clamp(13px, 2.4vw, 17px); color: #8a7656; line-height: 1.7; max-width: 30em; }
   .baby-emoji { font-size: clamp(46px, 9vw, 78px); animation: bob 1.4s ease-in-out infinite; }
+  .baby-avatar {
+    width: clamp(96px, 20vw, 150px);
+    height: clamp(96px, 20vw, 150px);
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    background-color: #fff;
+    border: 4px solid #fff;
+    box-shadow: 0 0 0 4px #ffcf33, 0 8px 18px rgba(120,96,60,0.35);
+    animation: bob 1.4s ease-in-out infinite;
+  }
   @keyframes bob { 0%,100%{transform:translateY(0) rotate(-3deg);} 50%{transform:translateY(-10px) rotate(3deg);} }
   .btn {
     margin-top: 6px;
@@ -109,7 +120,7 @@
 
   <!-- Start screen -->
   <div id="start" class="overlay">
-    <div class="baby-emoji">👶</div>
+    <div class="baby-avatar" id="startFace"></div>
     <div class="title">柏宇的爬行大冒險</div>
     <div class="subtitle">
       8 個月大的柏宇在客廳裡開始爬行探險！<br>
@@ -122,7 +133,7 @@
 
   <!-- Game over screen -->
   <div id="over" class="overlay hidden">
-    <div class="baby-emoji" id="overFace">😴</div>
+    <div class="baby-avatar" id="overFace"></div>
     <div class="title" id="overTitle">柏宇累累要休息～</div>
     <div class="stat-row">
       <div class="stat"><div class="num" id="finalScore">0</div><div class="lbl">爬行距離 (公分)</div></div>
@@ -239,6 +250,11 @@
     };
     img.src = src;
   });
+  // Hero avatar on the start screen — use a clear baby close-up.
+  var startFaceEl = document.getElementById("startFace");
+  if (startFaceEl && BABY_FACES.length) {
+    startFaceEl.style.backgroundImage = "url('" + BABY_FACES[BABY_FACES.length - 1] + "')";
+  }
   function pickFace() {
     if (babyImgs.length) currentFace = babyImgs[(Math.random() * babyImgs.length) | 0];
   }
@@ -532,7 +548,7 @@
     badgeLineEl.textContent = "獲得徽章：" + badge;
 
     overTitleEl.textContent = total > 1018 ? "柏宇今天超級棒！" : "柏宇累累要休息～";
-    overFaceEl.textContent = total > 1018 ? "🥳" : "😴";
+    overFaceEl.style.backgroundImage = "url('" + ((currentFace && currentFace.src) || BABY_FACES[0]) + "')";
     overScreen.classList.remove("hidden");
     blip(220, 0.4, "sine", 0.07);
   }
