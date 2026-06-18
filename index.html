@@ -150,18 +150,37 @@
   }
   fitCanvas();
 
-  // Explicitly size the game frame to a 16:9 box that fits the viewport.
-  // This is a fallback for browsers without CSS aspect-ratio support
+  // Explicitly size the game frame to a 16:9 box that fills the viewport.
+  // Also a fallback for browsers without CSS aspect-ratio support
   // (notably iOS Safari < 15, where #wrap would otherwise collapse to 0 height).
+  // On a portrait phone the 16:9 frame is tiny, so we rotate it 90° to fill
+  // the screen sideways. Input is "tap anywhere to jump", which is
+  // orientation-independent, so rotating the frame is safe.
   function sizeWrap() {
     var wrap = document.getElementById("wrap");
     var vw = window.innerWidth;
     var vh = window.innerHeight;
-    var width = Math.min(880, vw);
+    var portrait = vh > vw;
+    // When rotating, fit the landscape frame into the swapped dimensions.
+    var availW = portrait ? vh : vw;
+    var availH = portrait ? vw : vh;
+    var width = Math.min(880, availW);
     var height = width * 9 / 16;
-    if (height > vh) { height = vh; width = height * 16 / 9; }
+    if (height > availH) { height = availH; width = height * 16 / 9; }
     wrap.style.width = width + "px";
     wrap.style.height = height + "px";
+    if (portrait) {
+      // Take it out of flex flow and center+rotate it over the whole screen.
+      wrap.style.position = "fixed";
+      wrap.style.left = "50%";
+      wrap.style.top = "50%";
+      wrap.style.transform = "translate(-50%, -50%) rotate(90deg)";
+    } else {
+      wrap.style.position = "";
+      wrap.style.left = "";
+      wrap.style.top = "";
+      wrap.style.transform = "";
+    }
   }
   sizeWrap();
 
