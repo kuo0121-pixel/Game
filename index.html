@@ -325,6 +325,8 @@
       baby.onGround = false;
       baby.squash = 0.4;
       blip(520, 0.12, "square", 0.05);
+      particles.push({ x: baby.x, y: GROUND_Y, ring: true, r0: 42, ml: 0.35, life: 0.35, vx: 0, vy: 0, g: 0, color: "rgba(255,255,255,0.85)" });
+      for (var js = 0; js < 6; js++) { var ja = Math.PI + Math.random() * Math.PI, jp = 60 + Math.random() * 70; particles.push({ x: baby.x, y: GROUND_Y - 4, vx: Math.cos(ja) * jp, vy: Math.sin(ja) * jp, g: 200, life: 0.4, color: "#fff3b0", star: true, sz: 4 }); }
     }
   }
   window.addEventListener("keydown", function (e) {
@@ -497,6 +499,7 @@
           popups.push({ x: cx, y: cy - 10, text: "+" + it.points, life: 0.9, color: "#ffd23f" });
           burst(cx, cy, "#ffd23f");
           for (var sp = 0; sp < 6; sp++) { var sa = Math.random() * 6.28, ss = 50 + Math.random() * 100; particles.push({ x: cx, y: cy, vx: Math.cos(sa) * ss, vy: Math.sin(sa) * ss - 30, life: 0.55, color: "#fff3b0", star: true }); }
+          particles.push({ x: cx, y: cy, vx: (Math.random() - 0.5) * 30, vy: -55, g: -10, life: 0.85, heart: true, color: "rgba(255,140,165,0.95)", sz: 6 });
           blip(820 + it.points * 6, 0.1, "sine", 0.06);
           showToast("+" + it.points + " " + it.name + "！");
           items.splice(j, 1);
@@ -510,15 +513,21 @@
       var ms = MILESTONES[milestoneIdx];
       showToast(ms.msg);
       blip(990, 0.2, "triangle", 0.06);
+      var cfc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3"];
+      for (var cf = 0; cf < 30; cf++) { var ca = Math.random() * 6.28, cs = 90 + Math.random() * 170; particles.push({ x: W / 2, y: 60, vx: Math.cos(ca) * cs, vy: Math.sin(ca) * cs - 70, g: 360, life: 1.2, confetti: true, color: cfc[(Math.random() * 5) | 0] }); }
       if (ms.msg.indexOf("生日") >= 0) { coolMode = true; showToast("解鎖：柏宇酷酷墨鏡 😎"); }
       milestoneIdx++;
     }
+
+    // ambient cuteness: sky twinkles + heart trail
+    if (Math.random() < 0.06) particles.push({ x: Math.random() * W, y: 40 + Math.random() * 170, vx: 0, vy: 0, g: 0, life: 0.6, color: "#ffffff", star: true, sz: 3.5 });
+    if (Math.random() < 0.03) particles.push({ x: baby.x + 8, y: baby.y - 78, vx: (Math.random() - 0.5) * 20, vy: -42 - Math.random() * 28, g: -30, life: 0.95, color: "rgba(255,150,175,0.95)", heart: true, sz: 7 });
 
     // particles
     for (var p = particles.length - 1; p >= 0; p--) {
       var pt = particles[p];
       pt.life -= dt;
-      pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 600 * dt;
+      pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += (pt.g == null ? 600 : pt.g) * dt;
       if (pt.life <= 0) particles.splice(p, 1);
     }
     for (var q = popups.length - 1; q >= 0; q--) {
@@ -598,6 +607,25 @@
     }
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, W, GROUND_Y);
+
+    // cheerful smiling sun with slowly spinning rays
+    var sx = 92, sy = 118, sr = 30;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.fillStyle = "rgba(255,221,87,0.5)";
+    ctx.rotate(world.scroll * 0.002);
+    for (var ry = 0; ry < 12; ry++) { ctx.rotate(Math.PI / 6); ctx.fillRect(sr + 4, -3, 13, 6); }
+    ctx.restore();
+    ctx.fillStyle = "#ffd23f";
+    ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,130,130,0.5)";
+    ctx.beginPath(); ctx.arc(sx - 15, sy + 5, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + 15, sy + 5, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#e0972f";
+    ctx.beginPath(); ctx.arc(sx - 10, sy - 4, 3.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + 10, sy - 4, 3.4, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = "#e0972f"; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(sx, sy + 3, 11, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
 
     // far hills (lightest + slowest = atmospheric depth)
     var of0 = (world.scroll * 0.06) % 620;
@@ -766,20 +794,42 @@
   function drawParticles() {
     for (var i = 0; i < particles.length; i++) {
       var p = particles[i];
-      ctx.globalAlpha = Math.max(0, p.life * 2);
+      if (p.ring) {
+        ctx.globalAlpha = Math.max(0, p.life / p.ml);
+        ctx.lineWidth = 3; ctx.strokeStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r0 * (1 - p.life / p.ml), 0, Math.PI * 2); ctx.stroke();
+        continue;
+      }
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
       ctx.fillStyle = p.color;
       if (p.star) {
         ctx.save();
         ctx.translate(p.x, p.y); ctx.rotate(p.life * 9);
         ctx.beginPath();
-        for (var s = 0; s < 8; s++) { var rr = (s % 2) ? 2 : 5.5, aa = s * Math.PI / 4; ctx.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr); }
+        for (var s = 0; s < 8; s++) { var rr = (s % 2) ? 2 : (p.sz || 5.5), aa = s * Math.PI / 4; ctx.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr); }
         ctx.closePath(); ctx.fill();
+        ctx.restore();
+      } else if (p.heart) {
+        drawHeart(p.x, p.y, p.sz || 7);
+      } else if (p.confetti) {
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.x * 0.12 + p.life * 6);
+        ctx.fillRect(-3, -4, 6, 8);
         ctx.restore();
       } else {
         ctx.beginPath(); ctx.arc(p.x, p.y, p.sz || 4, 0, Math.PI * 2); ctx.fill();
       }
     }
     ctx.globalAlpha = 1;
+  }
+  function drawHeart(x, y, s) {
+    ctx.beginPath();
+    ctx.arc(x - s * 0.5, y - s * 0.3, s * 0.5, 0, Math.PI * 2);
+    ctx.arc(x + s * 0.5, y - s * 0.3, s * 0.5, 0, Math.PI * 2);
+    ctx.moveTo(x - s, y - s * 0.05);
+    ctx.lineTo(x, y + s * 0.9);
+    ctx.lineTo(x + s, y - s * 0.05);
+    ctx.closePath(); ctx.fill();
   }
 
   // ---------- Cute baby (canvas vector) ----------
