@@ -92,6 +92,13 @@
   .stat { background: #fff7ea; border-radius: 14px; padding: 10px 18px; box-shadow: 0 3px 0 #e6d4b3; }
   .stat .num { font-size: clamp(22px, 4vw, 34px); font-weight: 800; color: #d98344; }
   .stat .lbl { font-size: 12px; color: #a8916c; margin-top: 2px; }
+  /* story screen */
+  .btn-soft { background: linear-gradient(#ffd59e, #f7b56a); box-shadow: 0 5px 0 #d89248, 0 8px 14px rgba(201,109,40,0.3); font-size: clamp(13px,2.4vw,16px); padding: 10px 24px; }
+  .story-photos { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .story-photos div { width: clamp(50px,11vw,74px); height: clamp(50px,11vw,74px); border-radius: 50%; background-size: cover; background-position: center; border: 3px solid #fff; box-shadow: 0 3px 8px rgba(120,96,60,0.3); }
+  .story-body { max-width: 40em; width: min(92vw,640px); max-height: 44vh; overflow-y: auto; text-align: left; color: #6f5a3e; font-size: clamp(13px,2.4vw,16px); line-height: 1.75; }
+  .story-body p { margin: 0 0 10px; }
+  .story-quote { font-weight: 800; color: #d96aa0; text-align: center; margin-top: 4px; }
   /* mission panel */
   .missions { display: flex; flex-direction: column; gap: 6px; width: min(92vw, 420px); margin: 2px 0; }
   .m-head { font-size: 12px; font-weight: 800; color: #c98a4b; text-align: left; margin-top: 2px; }
@@ -133,19 +140,20 @@
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
   /* birthday "growth throwback" newborn card */
+  /* small celebratory flash in the top-left sky — never over the center or the obstacle lane */
   #throwback {
-    position: absolute; top: 38%; left: 50%;
-    transform: translate(-50%, -50%) scale(0.8) rotate(-4deg);
+    position: absolute; top: 54px; left: 12px;
+    transform: scale(0.8) rotate(-5deg); transform-origin: top left;
     opacity: 0; pointer-events: none; transition: opacity .4s, transform .4s;
-    background: #fff; padding: 10px 10px 8px; border-radius: 16px;
-    box-shadow: 0 10px 30px rgba(120,90,40,0.4); text-align: center; z-index: 6;
+    background: #fff; padding: 6px 6px 4px; border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(120,90,40,0.35); text-align: center; z-index: 6;
   }
-  #throwback.show { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-4deg); }
+  #throwback.show { opacity: 1; transform: scale(1) rotate(-5deg); }
   #tbPhoto {
-    width: clamp(120px, 26vw, 190px); height: clamp(120px, 26vw, 190px);
-    border-radius: 12px; background-size: cover; background-position: center; background-color: #ffe;
+    width: clamp(64px, 13vw, 96px); height: clamp(64px, 13vw, 96px);
+    border-radius: 9px; background-size: cover; background-position: center; background-color: #ffe;
   }
-  #tbCap { margin-top: 6px; font-weight: 800; color: #d96aa0; font-size: clamp(13px, 2.6vw, 18px); }
+  #tbCap { margin-top: 3px; font-weight: 800; color: #d96aa0; font-size: clamp(10px, 2vw, 13px); white-space: nowrap; }
   #muteBtn {
     position:absolute; bottom:10px; right:12px; pointer-events:auto;
     background:rgba(255,255,255,0.75); border:none; border-radius:10px;
@@ -180,7 +188,22 @@
       <div class="ctl tip">輕點跳過地上油漬／水漬，按住跳過高障礙 ✨</div>
     </div>
     <button class="btn" id="startBtn">開始爬行！</button>
+    <button class="btn btn-soft" id="storyBtn">💛 柏宇的故事</button>
     <div class="missions" id="missions"></div>
+  </div>
+
+  <!-- 柏宇's story -->
+  <div id="story" class="overlay hidden">
+    <div class="title" style="font-size:clamp(22px,4.4vw,38px)">💛 柏宇的故事</div>
+    <div class="story-photos" id="storyPhotos"></div>
+    <div class="story-body">
+      <p>柏宇於 <b>2025 年 10 月 18 日下午 3:05</b> 在台北出生，體重只有 <b>2495 公克</b>，小小的身體裡卻藏著旺盛的生命力，出生 Apgar 9–10 分。</p>
+      <p>懷孕期間媽媽心臟功能不好，全家一路擔心；柏宇卻努力長大、平安來到世界。出生一個多月後，媽媽因急性心臟衰竭住院，那是一段全家彼此守護的日子——爸爸一邊照顧柏宇、一邊牽掛媽媽，媽媽在醫院努力康復，再回到孩子身邊。</p>
+      <p>如今柏宇已超過 8 公斤，很早就會自己扶站，對世界充滿好奇，看到東西就想摸、想舔、想研究。對大人來說，客廳只是客廳；對柏宇來說，<b>沙發是山脈、地墊是星球、玩具是還沒被發現的新世界</b>——這正是這個遊戲的由來。</p>
+      <p>他活力旺盛、很黏媽媽、害羞又愛觀察，總用笑聲、眼神和依賴，提醒大家繼續往前走。</p>
+      <p class="story-quote">柏宇是一顆帶著旺盛生命力來到人間的小星星，在一家人最需要力量的時候，用笑聲、依賴和每天一點點的成長，陪大家重新相信未來。</p>
+    </div>
+    <button class="btn" id="storyBackBtn">← 回到遊戲</button>
   </div>
 
   <!-- Game over screen -->
@@ -670,6 +693,23 @@
 
   document.getElementById("startBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
   document.getElementById("retryBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
+  // 柏宇's story screen
+  var storyScreen = document.getElementById("story");
+  var storyPhotosEl = document.getElementById("storyPhotos");
+  document.getElementById("storyBtn").addEventListener("click", function () {
+    // newborn → now: throwback photos plus a current 8-month face
+    if (storyPhotosEl && !storyPhotosEl.childElementCount) {
+      var pics = (typeof THROWBACK_FACES !== "undefined" ? THROWBACK_FACES.slice() : []);
+      if (BABY_FACES.length) pics.push(BABY_FACES[BABY_FACES.length - 1]);
+      pics.forEach(function (src) { var d = document.createElement("div"); d.style.backgroundImage = "url('" + src + "')"; storyPhotosEl.appendChild(d); });
+    }
+    startScreen.classList.add("hidden");
+    storyScreen.classList.remove("hidden");
+  });
+  document.getElementById("storyBackBtn").addEventListener("click", function () {
+    storyScreen.classList.add("hidden");
+    startScreen.classList.remove("hidden");
+  });
 
   function startGame() {
     ensureAudio();   // unlock audio whether launched by tap or key
