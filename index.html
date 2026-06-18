@@ -175,9 +175,9 @@
       收集 🍼 奶瓶、🦷 固齒器、🧸 玩具，閃避紅黑色的尖刺怪 👾。
     </div>
     <div class="controls">
-      <div class="ctl"><b>跳</b>：點一下畫面　/　空白鍵・↑</div>
+      <div class="ctl"><b>跳</b>：輕點＝小跳，<b>按住＝跳更高</b>（空白鍵・↑）</div>
       <div class="ctl"><b>二段跳</b>：跳到空中時<b>再點一下</b>（最多兩段！）</div>
-      <div class="ctl tip">高處的寶物要靠二段跳才吃得到 ✨</div>
+      <div class="ctl tip">輕點跳過地上油漬／水漬，按住跳過高障礙 ✨</div>
     </div>
     <button class="btn" id="startBtn">開始爬行！</button>
     <div class="missions" id="missions"></div>
@@ -288,7 +288,6 @@
     // iOS Safari starts the context "suspended"; it must be resumed inside a user gesture.
     if (audioCtx && audioCtx.state === "suspended") { audioCtx.resume(); }
     loadBabySfx();
-    startBgm();
   }
   // decode 柏宇's voice clips into buffers once the context exists
   var babyBuf = {}, babyLoaded = false, lastCoo = 0;
@@ -352,7 +351,7 @@
   muteBtn.addEventListener("click", function () {
     muted = !muted;
     muteBtn.textContent = muted ? "🔇" : "🔊";
-    if (bgmEl) { if (muted) bgmEl.pause(); else startBgm(); }
+    if (bgmEl) { if (muted) bgmEl.pause(); else if (state === "playing") startBgm(); }
   });
 
   // ---------- 柏宇 photo head ----------
@@ -615,11 +614,18 @@
     coyote = 0; jumpBuf = 0;
     baby.jumps++;
     baby.squash = 0.4;
+    jumpCutDone = false;   // releasing early will shorten this jump (variable height)
     sfxJump();
     var ry = first ? GROUND_Y : baby.y;
     particles.push({ x: baby.x, y: ry, ring: true, r0: first ? 42 : 30, ml: 0.35, life: 0.35, vx: 0, vy: 0, g: 0, color: "rgba(255,255,255,0.85)" });
     for (var js = 0; js < 6; js++) { var ja = Math.PI + Math.random() * Math.PI, jp = 60 + Math.random() * 70; particles.push({ x: baby.x, y: ry - 4, vx: Math.cos(ja) * jp, vy: Math.sin(ja) * jp, g: 200, life: 0.4, color: "#fff3b0", star: true, sz: 4 }); }
   }
+  // Variable jump height: a quick tap is cut short (a little hop, e.g. to skip a
+  // floor slick), holding lets it rise to full height (to clear tall obstacles).
+  function releaseJump() {
+    if (!jumpCutDone && baby.vy < -180) { baby.vy *= 0.55; jumpCutDone = true; }
+  }
+  var jumpCutDone = true;
   window.addEventListener("keydown", function (e) {
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
       e.preventDefault();
@@ -628,6 +634,9 @@
       else if (state === "over") startGame();
       else jump();
     }
+  });
+  window.addEventListener("keyup", function (e) {
+    if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") releaseJump();
   });
   // Tap to jump. Bind to the whole wrap (not just the canvas) and handle
   // touchstart explicitly so iOS Safari reliably registers the tap and
@@ -649,18 +658,23 @@
   }
   wrapEl.addEventListener("pointerdown", tapJump);
   wrapEl.addEventListener("touchstart", tapJump, { passive: false });
+  wrapEl.addEventListener("pointerup", releaseJump);
+  wrapEl.addEventListener("pointercancel", releaseJump);
+  wrapEl.addEventListener("touchend", releaseJump, { passive: true });
 
   document.getElementById("startBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
   document.getElementById("retryBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
 
   function startGame() {
-    ensureAudio();   // unlock audio + start BGM whether launched by tap or key
+    ensureAudio();   // unlock audio whether launched by tap or key
     reset();
     state = "playing";
     startScreen.classList.add("hidden");
     overScreen.classList.add("hidden");
     if (throwbackEl) throwbackEl.classList.remove("show");
     hud.classList.remove("hidden");
+    if (bgmEl) { try { bgmEl.currentTime = 0; } catch (e) {} }
+    startBgm();   // BGM plays only during the run
     sfxPower();
     // first-ever run: nudge the double-jump so it's discoverable
     try {
@@ -1011,6 +1025,7 @@
   function gameOver() {
     state = "over";
     hud.classList.add("hidden");
+    if (bgmEl) bgmEl.pause();   // BGM stops at game over
     if (throwbackEl) throwbackEl.classList.remove("show");
     var total = Math.floor(dist);
     finalScoreEl.textContent = total;
