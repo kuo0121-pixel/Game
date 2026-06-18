@@ -179,7 +179,7 @@
     <div class="baby-avatar" id="startFace"></div>
     <div class="title">柏宇的爬行大冒險</div>
     <div class="subtitle">
-      8 個月大的柏宇在客廳裡開始爬行探險！<br>
+      柏宇在客廳裡展開他的大冒險！<br>
       收集 🍼 奶瓶、🦷 固齒器、🧸 玩具，閃避紅黑色的尖刺怪 👾。
     </div>
     <div class="controls">
@@ -461,16 +461,16 @@
   // 柏宇's ride evolves with distance (unlocked around milestones)
   var MOUNTS = [
     { id: "crawl",   name: "爬行",   at: 0,     emoji: "👶" },
-    { id: "walk",    name: "走路",   at: 200,   emoji: "🚶" },
-    { id: "walker",  name: "學步車", at: 500,   emoji: "🛒" },
-    { id: "bike",    name: "腳踏車", at: 1018,  emoji: "🚲" },
-    { id: "moto",    name: "摩托車", at: 1800,  emoji: "🏍️" },
-    { id: "car",     name: "汽車",   at: 2800,  emoji: "🚗" },
-    { id: "yacht",   name: "遊艇",   at: 4200,  emoji: "🛥️" },
-    { id: "plane",   name: "飛機",   at: 6000,  emoji: "✈️" },
-    { id: "shuttle", name: "太空梭", at: 8500,  emoji: "🚀" },
-    { id: "ufo",     name: "飛碟",   at: 12000, emoji: "🛸" },
-    { id: "cloud",   name: "筋斗雲", at: 17000, emoji: "☁️" }
+    { id: "walk",    name: "走路",   at: 450,   emoji: "🚶" },
+    { id: "walker",  name: "學步車", at: 1000,  emoji: "🛒" },
+    { id: "bike",    name: "腳踏車", at: 1800,  emoji: "🚲" },
+    { id: "moto",    name: "摩托車", at: 2800,  emoji: "🏍️" },
+    { id: "car",     name: "汽車",   at: 4000,  emoji: "🚗" },
+    { id: "yacht",   name: "遊艇",   at: 5600,  emoji: "🛥️" },
+    { id: "plane",   name: "飛機",   at: 7600,  emoji: "✈️" },
+    { id: "shuttle", name: "太空梭", at: 10000, emoji: "🚀" },
+    { id: "ufo",     name: "飛碟",   at: 13500, emoji: "🛸" },
+    { id: "cloud",   name: "筋斗雲", at: 18000, emoji: "☁️" }
   ];
 
   // Encouraging milestone messages (cute & warm)
@@ -549,7 +549,7 @@
     showThrowback();
   }
   // brief "growth throwback": flash a couple of newborn photos during the party
-  var THROWBACK_CAPS = ["剛出生的小柏宇 👶", "從小不點長大囉～", "8 個月就會爬了！🎉", "生日快樂，柏宇！🎂"];
+  var THROWBACK_CAPS = ["剛出生的小柏宇 👶", "從小不點長大囉～", "越長越好奇 🌟", "生日快樂，柏宇！🎂"];
   var tbTimers = [];
   function showThrowback() {
     if (!throwbackEl || !THROWBACK_FACES.length) return;
@@ -558,7 +558,7 @@
     // shuffle the photos and show each for a DIFFERENT length, spread across the party
     var order = THROWBACK_FACES.map(function (_, i) { return i; });
     for (var a = order.length - 1; a > 0; a--) { var b = (Math.random() * (a + 1)) | 0, tmp = order[a]; order[a] = order[b]; order[b] = tmp; }
-    var durs = [800, 1500, 1000, 1800, 1200];   // varied display lengths (ms)
+    var durs = [1600, 2200, 1800, 2400, 2000];   // varied display lengths (ms), slow enough to read
     function showOne(idx, cap) {
       tbPhotoEl.style.backgroundImage = "url('" + THROWBACK_FACES[idx] + "')";
       tbCapEl.textContent = cap;
@@ -570,7 +570,7 @@
         var dur = durs[k % durs.length], cap = THROWBACK_CAPS[k % THROWBACK_CAPS.length];
         tbTimers.push(setTimeout(function () { showOne(order[k], cap); }, clock));
         tbTimers.push(setTimeout(function () { throwbackEl.classList.remove("show"); }, clock + dur));
-        clock += dur + 280;   // brief fade-gap between photos
+        clock += dur + 420;   // fade-gap between photos
       })(k);
     }
   }
@@ -764,17 +764,35 @@
   }
   function spawnPower() {
     var types = [
-      { power: "shield", powerName: "護盾", kind: "pshield" },
-      { power: "magnet", powerName: "磁鐵", kind: "pmagnet" },
-      { power: "star",   powerName: "無敵星", kind: "pstar" }
+      { power: "mystery", powerName: "驚喜盒", kind: "pmystery", w: 3 },
+      { power: "shield",  powerName: "護盾",   kind: "pshield",  w: 2 },
+      { power: "magnet",  powerName: "磁鐵",   kind: "pmagnet",  w: 2 },
+      { power: "star",    powerName: "無敵星", kind: "pstar",    w: 1.5 },
+      { power: "heart",   powerName: "愛心",   kind: "pheart",   w: 1.5 }
     ];
-    var t = types[(Math.random() * types.length) | 0];
+    var tot = 0, i; for (i = 0; i < types.length; i++) tot += types[i].w;
+    var r = Math.random() * tot, t = types[0];
+    for (i = 0; i < types.length; i++) { r -= types[i].w; if (r <= 0) { t = types[i]; break; } }
     items.push({ x: W + 30, y: GROUND_Y - 80 - Math.random() * 50, r: 22, kind: t.kind, power: t.power, powerName: t.powerName, name: t.powerName, taken: false, bob: Math.random() * 6.28 });
   }
+  // applies a power-up; returns a toast message (or null to use the default)
   function applyPower(p) {
     if (p === "shield") shield = true;
     else if (p === "magnet") magnetTimer = 6;
     else if (p === "star") { starTimer = 5; invuln = Math.max(invuln, 5); }
+    else if (p === "heart") {
+      if (hearts < 3) { hearts++; updateHUD(); return "補滿一顆愛心 ❤️"; }
+      score += 50; dist += 20; return "愛心滿滿！+50 分";
+    }
+    else if (p === "bonus") { score += 60; dist += 24; return "獎勵糖果 +60 分！"; }
+    else if (p === "mystery") {
+      var pool = ["shield", "magnet", "star", "heart", "bonus"];
+      var pick = pool[(Math.random() * pool.length) | 0];
+      var sub = applyPower(pick);
+      var names = { shield: "護盾 🛡️", magnet: "磁鐵 🧲", star: "無敵星 ⭐", heart: "愛心 ❤️", bonus: "加分 ✨" };
+      return "🎁 驚喜盒抽到：" + (sub || names[pick]);
+    }
+    return null;
   }
 
   // ---------- Difficulty director ----------
@@ -1001,10 +1019,10 @@
         if (cx > bb.x - it.r && cx < bb.x + bb.w + it.r && cy > bb.y - it.r && cy < bb.y + bb.h + it.r) {
           it.taken = true;
           if (it.power) {
-            applyPower(it.power);
+            var pmsg = applyPower(it.power);
             popups.push({ x: cx, y: cy - 12, text: it.powerName, life: 1.1, color: "#8b6bff" });
             sfxPower();
-            showToast("獲得 " + it.powerName);
+            showToast(pmsg || ("獲得 " + it.powerName));
           } else {
             combo++; comboTimer = 2.5;
             if (it.kind === "bottle") bumpStat("bottles", 1);
@@ -1519,17 +1537,26 @@
   function drawBanana(o) {
     var cx = o.x, by = o.y;
     ctx.save();
-    ctx.fillStyle = "rgba(40,25,10,0.22)"; ctx.beginPath(); ctx.ellipse(cx, by + 4, 22, 5, 0, 0, 6.28); ctx.fill();
-    // peel: a yellow body with three splayed flaps
-    ctx.fillStyle = "#ffd23f"; ctx.strokeStyle = "#d99a16"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(cx, by - 5, 12, 7, 0, 0, 6.28); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "#ffe27a";
-    for (var f = -1; f <= 1; f++) {
-      ctx.save(); ctx.translate(cx, by - 6); ctx.rotate(f * 0.8);
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(f * 6, -16, f * 20, -6); ctx.quadraticCurveTo(f * 8, -4, 0, 2); ctx.closePath(); ctx.fill();
-      ctx.restore();
-    }
-    ctx.fillStyle = "#9b6b1e"; ctx.fillRect(cx - 1.5, by - 16, 3, 6);
+    ctx.fillStyle = "rgba(40,25,10,0.22)"; ctx.beginPath(); ctx.ellipse(cx, by + 3, 24, 5, 0, 0, 6.28); ctx.fill();
+    ctx.translate(cx, by - 7);
+    ctx.lineJoin = "round";
+    // clear banana crescent lying on the ground
+    ctx.fillStyle = "#ffd23f"; ctx.strokeStyle = "#c79412"; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-24, 3);
+    ctx.quadraticCurveTo(0, -24, 24, 3);     // outer top curve
+    ctx.quadraticCurveTo(0, -9, -24, 3);     // inner bottom curve
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // brown tips at both ends
+    ctx.fillStyle = "#7a4e1a";
+    ctx.beginPath(); ctx.arc(-24, 3, 3.2, 0, 6.28); ctx.fill();
+    ctx.beginPath(); ctx.arc(24, 3, 3.2, 0, 6.28); ctx.fill();
+    // an open peel flap on the right so it reads as a slipped peel
+    ctx.fillStyle = "#ffe482";
+    ctx.beginPath(); ctx.moveTo(22, 2); ctx.quadraticCurveTo(34, -5, 33, 6); ctx.quadraticCurveTo(28, 7, 22, 4); ctx.closePath(); ctx.fill();
+    // glossy highlight
+    ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-15, -2); ctx.quadraticCurveTo(0, -15, 15, -2); ctx.stroke();
     ctx.restore();
   }
   function drawOil(o) {
@@ -1642,6 +1669,15 @@
         ctx.lineTo(Math.cos(an2) * s * 0.18, Math.sin(an2) * s * 0.18);
       }
       ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (kind === "pheart") {
+      ctx.fillStyle = "#ff5a6e"; drawHeart(0, -s * 0.06, s * 0.42);
+      ctx.fillStyle = "rgba(255,255,255,0.6)"; ctx.beginPath(); ctx.arc(-s * 0.14, -s * 0.18, s * 0.07, 0, 6.28); ctx.fill();
+    } else if (kind === "pmystery") {
+      ctx.fillStyle = "#ffcf33"; ctx.strokeStyle = "#e0972f"; ctx.lineWidth = 2.5;
+      roundRectPath(-s * 0.38, -s * 0.38, s * 0.76, s * 0.76, s * 0.16); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = "bold " + (s * 0.72) + "px -apple-system, sans-serif";
+      ctx.fillText("?", 0, s * 0.06);
     } else {
       ctx.fillStyle = "#5b8def"; ctx.strokeStyle = "#2c5bb5"; ctx.lineWidth = 2;
       roundRectPath(-s * 0.3, -s * 0.3, s * 0.6, s * 0.6, s * 0.1); ctx.fill(); ctx.stroke();
