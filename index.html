@@ -281,14 +281,14 @@
 
   // Collectible & obstacle defs
   var COLLECTIBLES = [
-    { emoji: "🍼", points: 10, name: "奶瓶" },
-    { emoji: "🦷", points: 15, name: "固齒器" },
-    { emoji: "🧸", points: 20, name: "玩具熊" },
-    { emoji: "🟦", points: 25, name: "DDIC 晶片" }  // tech easter-egg item
+    { kind: "bottle",  points: 10, name: "奶瓶" },
+    { kind: "teether", points: 15, name: "固齒器" },
+    { kind: "toy",     points: 20, name: "玩具熊" },
+    { kind: "chip",    points: 25, name: "DDIC 晶片" }
   ];
   var OBSTACLES = [
-    { emoji: "🤖", name: "掃地機器人", w: 56, h: 40 },
-    { emoji: "🛋️", name: "抱枕沙發", w: 64, h: 46 }
+    { kind: "spiker", name: "尖刺怪", w: 54, h: 44 },
+    { kind: "spiker", name: "大尖刺怪", w: 70, h: 52 }
   ];
 
   // Encouraging milestone messages (cute & warm)
@@ -390,7 +390,7 @@
   function spawnObstacle() {
     var o = OBSTACLES[(Math.random() * OBSTACLES.length) | 0];
     obstacles.push({
-      x: W + 40, y: GROUND_Y, w: o.w, h: o.h, emoji: o.emoji, name: o.name, hit: false
+      x: W + 40, y: GROUND_Y, w: o.w, h: o.h, kind: o.kind, name: o.name, hit: false
     });
   }
   function spawnItem() {
@@ -398,7 +398,7 @@
     // either low (crawl height) or high (needs a jump)
     var high = Math.random() < 0.5;
     var y = high ? GROUND_Y - 120 - Math.random() * 40 : GROUND_Y - 18;
-    items.push({ x: W + 30, y: y, r: 18, emoji: c.emoji, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
+    items.push({ x: W + 30, y: y, r: 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
   }
   function weightedItem() {
     // rarer high-value items
@@ -765,10 +765,7 @@
     // white inset disc so the icon pops
     ctx.fillStyle = "#fffbe8";
     ctx.beginPath(); ctx.arc(0, 0, it.r * 0.66, 0, Math.PI * 2); ctx.fill();
-    // themed emoji
-    ctx.font = (it.r * 1.05) + "px serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(it.emoji, 0, 1);
+    drawCollIcon(it.kind || "bottle", it.r);
     ctx.restore();
     // moving specular sweep
     ctx.save();
@@ -778,31 +775,86 @@
     ctx.restore();
   }
 
-  function drawObstacle(o) {
-    var bob = Math.sin((world.scroll + o.x) * 0.03) * 3;
+  function drawObstacle(o) { drawHazard(o); }
+  // a clearly-dangerous spiky, angry creature — never mistaken for a coin
+  function drawHazard(o) {
+    var bob = Math.sin((world.scroll + o.x) * 0.04) * 2;
+    var cx = o.x, bw = o.w, bh = o.h, topY = o.y - bh + bob;
     ctx.save();
-    if (o.hit) ctx.globalAlpha = 0.4;
-    // dark hazard base on the ground
-    ctx.fillStyle = "#5a3a18";
-    roundRectPath(o.x - o.w * 0.58, o.y - 7, o.w * 1.16, 13, 5); ctx.fill();
-    // contact shadow
+    if (o.hit) ctx.globalAlpha = 0.45;
+    // ground shadow
     ctx.fillStyle = "rgba(40,25,10,0.28)";
-    ctx.beginPath(); ctx.ellipse(o.x, o.y + 5, o.w * 0.6, 6, 0, 0, Math.PI * 2); ctx.fill();
-    // bigger emoji so it reads at a glance
-    ctx.font = (o.h * 1.4) + "px serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-    ctx.fillText(o.emoji, o.x, o.y + 4 + bob);
-    // pulsing RED hazard ring — clearly "avoid", not a coin
-    var lw = 3.5 + 1.8 * Math.sin(world.scroll * 0.2);
-    ctx.lineWidth = lw < 1 ? 1 : lw;
-    ctx.strokeStyle = "rgba(235,35,35,0.92)";
+    ctx.beginPath(); ctx.ellipse(cx, o.y + 5, bw * 0.55, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // dark body
+    ctx.fillStyle = "#454c58";
+    roundRectPath(cx - bw / 2, topY + 8, bw, bh - 8, 9); ctx.fill();
+    ctx.fillStyle = "#2f343d";
+    roundRectPath(cx - bw / 2, topY + bh - 12, bw, 10, 7); ctx.fill();
+    // yellow/black hazard stripes (clipped to body)
+    ctx.save();
+    roundRectPath(cx - bw / 2, topY + 8, bw, bh - 8, 9); ctx.clip();
+    ctx.globalAlpha = 0.16; ctx.fillStyle = "#ffcf33";
+    for (var i = -bh; i < bw; i += 16) {
+      ctx.beginPath();
+      ctx.moveTo(cx - bw / 2 + i, topY + 8);
+      ctx.lineTo(cx - bw / 2 + i + 8, topY + 8);
+      ctx.lineTo(cx - bw / 2 + i + 8 + bh, topY + bh);
+      ctx.lineTo(cx - bw / 2 + i + bh, topY + bh);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    // red spikes on top
+    ctx.fillStyle = "#d23b2e";
+    var n = Math.max(3, Math.floor(bw / 14));
+    for (var s = 0; s < n; s++) {
+      var sx = cx - bw / 2 + (s + 0.5) * bw / n;
+      ctx.beginPath(); ctx.moveTo(sx - 6, topY + 9); ctx.lineTo(sx, topY - 7); ctx.lineTo(sx + 6, topY + 9); ctx.closePath(); ctx.fill();
+    }
+    // angry eyes + brows
+    var ey = topY + bh * 0.52;
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx - bw * 0.16, ey, 6, 0, 6.28); ctx.arc(cx + bw * 0.16, ey, 6, 0, 6.28); ctx.fill();
+    ctx.fillStyle = "#d23b2e"; ctx.beginPath(); ctx.arc(cx - bw * 0.16, ey, 3, 0, 6.28); ctx.arc(cx + bw * 0.16, ey, 3, 0, 6.28); ctx.fill();
+    ctx.strokeStyle = "#1a1d22"; ctx.lineWidth = 3; ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.ellipse(o.x, o.y - o.h * 0.55 + bob, o.w * 0.66, o.h * 0.82, 0, 0, Math.PI * 2);
+    ctx.moveTo(cx - bw * 0.26, ey - bh * 0.22); ctx.lineTo(cx - bw * 0.06, ey - bh * 0.06);
+    ctx.moveTo(cx + bw * 0.26, ey - bh * 0.22); ctx.lineTo(cx + bw * 0.06, ey - bh * 0.06);
     ctx.stroke();
-    // warning sign bobbing above the hazard
-    ctx.font = "26px serif";
-    ctx.textBaseline = "middle";
-    ctx.fillText("⚠️", o.x, o.y - o.h * 1.5 - 6 + Math.sin(world.scroll * 0.12) * 3);
+    // pulsing red outline
+    var lw = 3 + 1.6 * Math.sin(world.scroll * 0.2);
+    ctx.lineWidth = lw < 1 ? 1 : lw; ctx.strokeStyle = "rgba(235,35,35,0.9)";
+    roundRectPath(cx - bw / 2 - 2, topY + 6, bw + 4, bh - 4, 10); ctx.stroke();
+    ctx.restore();
+  }
+  // cohesive vector collectible icons (drawn at the coin centre)
+  function drawCollIcon(kind, r) {
+    var s = r; ctx.save(); ctx.lineJoin = "round"; ctx.lineCap = "round";
+    if (kind === "bottle") {
+      ctx.fillStyle = "#eaf6fc"; ctx.strokeStyle = "#6bb7d6"; ctx.lineWidth = 2;
+      roundRectPath(-s * 0.2, -s * 0.26, s * 0.4, s * 0.6, s * 0.12); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#ffb3c1"; roundRectPath(-s * 0.13, -s * 0.42, s * 0.26, s * 0.18, s * 0.06); ctx.fill();
+      ctx.strokeStyle = "#9fcbe0"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-s * 0.08, -s * 0.02); ctx.lineTo(s * 0.08, -s * 0.02);
+      ctx.moveTo(-s * 0.08, s * 0.12); ctx.lineTo(s * 0.08, s * 0.12); ctx.stroke();
+    } else if (kind === "teether") {
+      ctx.strokeStyle = "#7ed957"; ctx.lineWidth = s * 0.22; ctx.beginPath(); ctx.arc(0, 0, s * 0.32, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "#ff9ec4"; ctx.lineWidth = s * 0.1; ctx.beginPath(); ctx.arc(0, 0, s * 0.32, Math.PI * 0.1, Math.PI * 0.95); ctx.stroke();
+    } else if (kind === "toy") {
+      ctx.fillStyle = "#c98a4b";
+      ctx.beginPath(); ctx.arc(-s * 0.24, -s * 0.22, s * 0.13, 0, 6.28); ctx.arc(s * 0.24, -s * 0.22, s * 0.13, 0, 6.28); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.34, 0, 6.28); ctx.fill();
+      ctx.fillStyle = "#e8c39a"; ctx.beginPath(); ctx.arc(0, s * 0.09, s * 0.16, 0, 6.28); ctx.fill();
+      ctx.fillStyle = "#3a2a1a";
+      ctx.beginPath(); ctx.arc(-s * 0.12, -s * 0.05, s * 0.05, 0, 6.28); ctx.arc(s * 0.12, -s * 0.05, s * 0.05, 0, 6.28); ctx.arc(0, s * 0.07, s * 0.045, 0, 6.28); ctx.fill();
+    } else {
+      ctx.fillStyle = "#5b8def"; ctx.strokeStyle = "#2c5bb5"; ctx.lineWidth = 2;
+      roundRectPath(-s * 0.3, -s * 0.3, s * 0.6, s * 0.6, s * 0.1); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#cfe0ff"; ctx.beginPath(); ctx.arc(0, 0, s * 0.12, 0, 6.28); ctx.fill();
+      ctx.strokeStyle = "#2c5bb5"; ctx.lineWidth = 1.5;
+      for (var k = -1; k <= 1; k++) {
+        ctx.beginPath(); ctx.moveTo(s * 0.3, k * s * 0.15); ctx.lineTo(s * 0.42, k * s * 0.15);
+        ctx.moveTo(-s * 0.3, k * s * 0.15); ctx.lineTo(-s * 0.42, k * s * 0.15); ctx.stroke();
+      }
+    }
     ctx.restore();
   }
 
