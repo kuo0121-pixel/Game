@@ -1438,6 +1438,33 @@
         cloud(xd + 100, 86, 1.0, golden); cloud(xd + 330, 150, 0.72, golden);
         if (theme === "sky") { cloud(xd + 240, 250, 1.2, false); cloud(xd + 40, 330, 0.9, false); }
       }
+      // a couple of little 柏宇 drifting by on clouds (ambient charm)
+      if (babyImgs.length) {
+        var bof = (world.scroll * 0.16) % 820;
+        for (var sb = -1; sb < W / 820 + 1; sb++) {
+          var sx = sb * 820 - bof;
+          drawSkyBaby(sx + 210, 64, 0.95, babyImgs[0], golden);
+          drawSkyBaby(sx + 560, 132, 0.72, babyImgs[babyImgs.length > 2 ? 2 : 0], golden);
+        }
+      }
+    }
+  }
+  // a tiny 柏宇 (real photo head) riding a fluffy cloud, with little waving arms
+  function drawSkyBaby(x, y, s, img, golden) {
+    cloud(x, y + 16 * s, 0.62 * s, golden);
+    var hr = 22 * s;
+    if (img && img.complete) {
+      ctx.save();
+      ctx.strokeStyle = "#f6c9a0"; ctx.lineWidth = 4 * s; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x - hr * 0.7, y + hr * 0.5); ctx.lineTo(x - hr * 1.2, y + hr * 0.1 + Math.sin(world.scroll * 0.05) * 3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + hr * 0.7, y + hr * 0.5); ctx.lineTo(x + hr * 1.2, y + hr * 0.1 - Math.sin(world.scroll * 0.05) * 3); ctx.stroke();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x, y, hr + 2, 0, 6.28); ctx.fill();
+      ctx.save();
+      ctx.beginPath(); ctx.arc(x, y, hr, 0, 6.28); ctx.clip();
+      ctx.drawImage(img, x - hr, y - hr, hr * 2, hr * 2);
+      ctx.restore();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = "#ffcf33"; ctx.beginPath(); ctx.arc(x, y, hr + 1, 0, 6.28); ctx.stroke();
+      ctx.restore();
     }
   }
   function drawSun(golden) {
