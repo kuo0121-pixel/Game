@@ -99,6 +99,17 @@
   .story-body { max-width: 40em; width: min(92vw,640px); max-height: 44vh; overflow-y: auto; text-align: left; color: #6f5a3e; font-size: clamp(13px,2.4vw,16px); line-height: 1.75; }
   .story-body p { margin: 0 0 10px; }
   .story-quote { font-weight: 800; color: #d96aa0; text-align: center; margin-top: 4px; }
+  /* local leaderboard */
+  .lb-panel { display: flex; flex-direction: column; gap: 4px; width: min(92vw, 420px); }
+  .lb-title { font-size: 13px; font-weight: 800; color: #c98a4b; }
+  .lb-empty { font-size: 13px; color: #a8916c; }
+  .lb-row { display: flex; align-items: center; gap: 8px; background: #fff7ea; border-radius: 10px; padding: 5px 12px; box-shadow: 0 2px 0 #e6d4b3; font-size: 14px; color: #6f5a3e; }
+  .lb-row.me { background: #fff0c2; box-shadow: 0 2px 0 #e7c86a; font-weight: 800; }
+  .lb-rank { flex: 0 0 auto; width: 24px; text-align: center; }
+  .lb-name { flex: 1 1 auto; text-align: left; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lb-score { flex: 0 0 auto; font-weight: 800; color: #d98344; }
+  .lb-entry { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  #lbName { font-size: 16px; padding: 8px 12px; border-radius: 10px; border: 2px solid #e6d4b3; background: #fffdf8; color: #6f5a3e; width: clamp(120px, 40vw, 180px); }
   /* mission panel */
   .missions { display: flex; flex-direction: column; gap: 6px; width: min(92vw, 420px); margin: 2px 0; }
   .m-head { font-size: 12px; font-weight: 800; color: #c98a4b; text-align: left; margin-top: 2px; }
@@ -191,6 +202,7 @@
     <button class="btn" id="startBtn">開始爬行！</button>
     <button class="btn btn-soft" id="storyBtn">💛 柏宇的故事</button>
     <div class="missions" id="missions"></div>
+    <div class="lb-panel" id="lbStart"></div>
   </div>
 
   <!-- 柏宇's story -->
@@ -216,6 +228,11 @@
       <div class="stat"><div class="num" id="bestScore">0</div><div class="lbl">最佳紀錄</div></div>
     </div>
     <div class="badge-line" id="badgeLine"></div>
+    <div class="lb-entry hidden" id="lbEntry">
+      <input id="lbName" maxlength="8" placeholder="輸入名字" autocomplete="off" />
+      <button class="btn btn-soft" id="lbSave">🏆 登錄排行榜</button>
+    </div>
+    <div class="lb-panel" id="lbOver"></div>
     <div class="missions" id="overMissions"></div>
     <button class="btn" id="retryBtn">再爬一次！</button>
   </div>
@@ -294,6 +311,10 @@
   }
   var missionsEl  = document.getElementById("missions");
   var overMissionsEl = document.getElementById("overMissions");
+  var lbStartEl = document.getElementById("lbStart");
+  var lbOverEl  = document.getElementById("lbOver");
+  var lbEntryEl = document.getElementById("lbEntry");
+  var lbNameEl  = document.getElementById("lbName");
   var throwbackEl = document.getElementById("throwback");
   var tbPhotoEl   = document.getElementById("tbPhoto");
   var tbCapEl     = document.getElementById("tbCap");
@@ -602,6 +623,42 @@
   }
   renderMissions(missionsEl, "start");   // initial paint (stats loaded above)
 
+  // ---------- Local leaderboard (this device) ----------
+  function esc(s) { return String(s).replace(/[<>&"]/g, function (c) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]; }); }
+  function loadLB() { try { var a = JSON.parse(localStorage.getItem("baiyu_lb") || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function saveLB(lb) { try { localStorage.setItem("baiyu_lb", JSON.stringify(lb)); } catch (e) {} }
+  function lbQualifies(score) { var lb = loadLB(); return score > 0 && (lb.length < 8 || score > lb[lb.length - 1].score); }
+  function lbAdd(name, score) {
+    var lb = loadLB(); lb.push({ name: String(name || "小柏粉").slice(0, 8), score: score });
+    lb.sort(function (a, b) { return b.score - a.score; }); lb = lb.slice(0, 8); saveLB(lb); return lb;
+  }
+  function renderLB(el, hi) {
+    if (!el) return;
+    var lb = loadLB();
+    var html = '<div class="lb-title">🏆 排行榜</div>';
+    if (!lb.length) { el.innerHTML = html + '<div class="lb-empty">還沒有紀錄，當第一名吧！</div>'; return; }
+    var used = false;
+    lb.slice(0, 5).forEach(function (e, i) {
+      var medal = ["🥇", "🥈", "🥉"][i] || (i + 1 + ".");
+      var me = (!used && hi != null && e.score === hi); if (me) used = true;
+      html += '<div class="lb-row' + (me ? " me" : "") + '"><span class="lb-rank">' + medal + '</span><span class="lb-name">' + esc(e.name) + '</span><span class="lb-score">' + e.score + '</span></div>';
+    });
+    el.innerHTML = html;
+  }
+  function submitLB() {
+    if (!lbNameEl) return;
+    var name = (lbNameEl.value || "").trim() || "小柏粉";
+    try { localStorage.setItem("baiyu_name", name); } catch (e) {}
+    var total = parseInt(finalScoreEl.textContent, 10) || 0;
+    lbAdd(name, total);
+    if (lbEntryEl) lbEntryEl.classList.add("hidden");
+    renderLB(lbOverEl, total); renderLB(lbStartEl, total);
+  }
+  var lbSaveBtn = document.getElementById("lbSave");
+  if (lbSaveBtn) lbSaveBtn.addEventListener("click", function () { ensureAudio(); submitLB(); });
+  if (lbNameEl) lbNameEl.addEventListener("keydown", function (e) { if (e.code === "Enter") { e.preventDefault(); submitLB(); } });
+  renderLB(lbStartEl);
+
   function reset() {
     baby = { x: 150, y: GROUND_Y, vy: 0, onGround: true, anim: 0, squash: 0, jumps: 0 };
     world = { scroll: 0 };
@@ -663,6 +720,7 @@
     else { (d.exitFullscreen || d.webkitExitFullscreen || function () {}).call(d); }
   }
   window.addEventListener("keydown", function (e) {
+    if (e.target && e.target.tagName === "INPUT") return;   // don't hijack name typing
     if (e.code === "KeyF") { e.preventDefault(); toggleFullscreen(); return; }
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
       e.preventDefault();
@@ -1136,6 +1194,13 @@
 
     overTitleEl.textContent = total > 1018 ? "柏宇今天超級棒！" : "柏宇累累要休息～";
     overFaceEl.style.backgroundImage = "url('" + sleepyFaceSrc() + "')";
+
+    // local leaderboard: offer name entry if this run makes the top 8
+    var qual = lbQualifies(total);
+    if (lbEntryEl) lbEntryEl.classList.toggle("hidden", !qual);
+    if (qual && lbNameEl) { try { lbNameEl.value = localStorage.getItem("baiyu_name") || ""; } catch (e) {} }
+    renderLB(lbOverEl, qual ? -1 : total);
+
     overScreen.classList.remove("hidden");
     blip(220, 0.4, "sine", 0.07);
   }
