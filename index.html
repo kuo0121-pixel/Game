@@ -425,10 +425,15 @@
     { kind: "toy",     points: 20, name: "玩具熊" },
     { kind: "chip",    points: 25, name: "DDIC 晶片" }
   ];
-  var OBSTACLES = [
-    { kind: "spiker", name: "尖刺怪", w: 54, h: 44 },
-    { kind: "spiker", name: "大尖刺怪", w: 70, h: 52 }
-  ];
+  // typed hazards: tall ones need a full (held) jump, low ones a light hop;
+  // banana/oil are non-damaging floor traps with their own effects.
+  var HAZARDS = {
+    tall:    { w: 54, h: 46, dmg: true,  name: "尖刺怪" },
+    bigtall: { w: 70, h: 56, dmg: true,  name: "大尖刺怪" },
+    low:     { w: 46, h: 22, dmg: true,  name: "小尖刺" },
+    banana:  { w: 42, h: 16, dmg: false, eff: "slip", name: "香蕉皮" },
+    oil:     { w: 60, h: 12, dmg: false, eff: "oil",  name: "油漬" }
+  };
 
   // 柏宇's ride evolves with distance (unlocked around milestones)
   var MOUNTS = [
@@ -463,7 +468,7 @@
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
   var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer;
   var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel;
-  var birthdayBurst, runCompleted, mountIdx, perfectStreak;
+  var birthdayBurst, runCompleted, mountIdx, perfectStreak, boostTimer, jumpLock;
 
   best = parseInt(localStorage.getItem("baiyu_best") || "0", 10) || 0;
 
@@ -585,7 +590,7 @@
     spawnTimer = 1.2; itemTimer = 0.7; invuln = 0; milestoneIdx = 0;
     combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9;
     coyote = 0; jumpBuf = 0; hitstop = 0; scoreShown = 0; segTimer = 1.0; segLevel = 0;
-    birthdayBurst = 0; runCompleted = []; mountIdx = 0; perfectStreak = 0;
+    birthdayBurst = 0; runCompleted = []; mountIdx = 0; perfectStreak = 0; boostTimer = 0; jumpLock = 0;
     coolMode = isBirthday;   // every run is a party on the real birthday
     pickFace();
     updateHUD();
@@ -599,6 +604,7 @@
   // ---------- Input ----------
   function jump() {
     if (state !== "playing") return;
+    if (jumpLock > 0) return;   // briefly can't jump after slipping on a banana
     // Coyote time: a freshly-grounded first jump is still allowed for a few
     // frames after leaving the floor. Input buffer: if a jump can't fire yet
     // (mid double-jump), remember it briefly so it auto-fires on landing.
@@ -697,11 +703,9 @@
   }
 
   // ---------- Spawning ----------
-  function spawnObstacle() {
-    var o = OBSTACLES[(Math.random() * OBSTACLES.length) | 0];
-    obstacles.push({
-      x: W + 40, y: GROUND_Y, w: o.w, h: o.h, kind: o.kind, name: o.name, hit: false
-    });
+  function spawnObstacleAt(x, key) {
+    var o = HAZARDS[key] || HAZARDS.tall;
+    obstacles.push({ x: x, y: GROUND_Y, w: o.w, h: o.h, type: key || "tall", dmg: o.dmg, eff: o.eff, name: o.name, hit: false, minGap: null });
   }
   function spawnItem() {
     var c = COLLECTIBLES[weightedItem()];
@@ -749,33 +753,37 @@
     { obs: [], items: [{ dx: 0, dy: 60 }, { dx: 0.35, dy: 110 }, { dx: 0.7, dy: 110 }, { dx: 1.05, dy: 60 }], rest: 1.0 },
     // 3 triple stair of hops, coins up high to reward jumps
     { obs: [{ dx: 0 }, { dx: 1 }, { dx: 2 }], items: [{ dx: 0.5, dy: HI }, { dx: 1.5, dy: HI }], rest: 1.6 },
-    // 4 big single you must clear, coin sitting on top
-    { obs: [{ dx: 0, big: true }], items: [{ dx: 0, dy: HI + 10 }], rest: 1.5 },
+    // 4 big single you must clear (hold for height), coin sitting on top
+    { obs: [{ dx: 0, t: "bigtall" }], items: [{ dx: 0, dy: HI + 10 }], rest: 1.5 },
     // 5 gentle rest: low coins only
     { obs: [], items: [{ dx: 0, dy: LO }, { dx: 0.5, dy: LO }, { dx: 1.0, dy: 70 }], rest: 0.9 },
-    // 6 stutter: hop, slightly longer gap, hop
-    { obs: [{ dx: 0 }, { dx: 1.4, big: true }], items: [{ dx: 0.7, dy: HI }], rest: 1.6 },
+    // 6 stutter: hop, slightly longer gap, big hop
+    { obs: [{ dx: 0 }, { dx: 1.4, t: "bigtall" }], items: [{ dx: 0.7, dy: HI }], rest: 1.6 },
     // 7 quad hops, tight, little reward (high-pressure late game)
-    { obs: [{ dx: 0 }, { dx: 1 }, { dx: 2 }, { dx: 3 }], items: [{ dx: 1.5, dy: HI }], rest: 1.1 }
+    { obs: [{ dx: 0 }, { dx: 1 }, { dx: 2 }, { dx: 3 }], items: [{ dx: 1.5, dy: HI }], rest: 1.1 },
+    // 8 low hop then tall: light tap, then a held jump (teaches variable height)
+    { obs: [{ dx: 0, t: "low" }, { dx: 1, t: "tall" }], items: [{ dx: 0.5, dy: LO }], rest: 1.4 },
+    // 9 banana run: little hops to skip slippery peels
+    { obs: [{ dx: 0, t: "banana" }, { dx: 0.7, t: "banana" }], items: [{ dx: 0.35, dy: LO }, { dx: 1.05, dy: LO }], rest: 1.2 },
+    // 10 oil slick then spiker: hop the oil or get sped into the spike
+    { obs: [{ dx: 0, t: "oil" }, { dx: 1.2, t: "tall" }], items: [{ dx: 0.6, dy: HI }], rest: 1.5 },
+    // 11 mixed lows then a wall
+    { obs: [{ dx: 0, t: "low" }, { dx: 1, t: "low" }, { dx: 2, t: "tall" }], items: [{ dx: 1.5, dy: HI }], rest: 1.4 }
   ];
   // which patterns are allowed at each distance tier (ramps up the pressure)
   function allowedPatterns() {
-    if (dist < 400)  return [0, 2, 5, 0];
-    if (dist < 1200) return [0, 1, 4, 2, 6, 5];
-    if (dist < 2500) return [1, 3, 4, 6, 0, 2];
-    if (dist < 5000) return [3, 1, 6, 4, 7, 3];
-    return [3, 7, 6, 1, 7, 3];   // very high distance: dense, relentless
+    if (dist < 400)  return [0, 2, 5, 8, 0];
+    if (dist < 1200) return [0, 1, 4, 2, 6, 5, 8, 9];
+    if (dist < 2500) return [1, 3, 4, 6, 8, 10, 9, 2];
+    if (dist < 5000) return [3, 1, 6, 4, 7, 11, 10, 9];
+    return [3, 7, 6, 11, 7, 10, 3];   // very high distance: dense, relentless
   }
   // spacing tightens with distance (0.82 -> 0.66 of a jump arc) so the late
   // game demands precise jumps while staying just barely clearable.
   function jumpGap() { return Math.max(200, speed * (0.82 - Math.min(0.16, dist / 50000))); }
-  function spawnObstacleAt(x, big) {
-    var o = big ? OBSTACLES[1] : OBSTACLES[0];
-    obstacles.push({ x: x, y: GROUND_Y, w: o.w, h: o.h, kind: o.kind, name: o.name, hit: false });
-  }
   function spawnPattern(p) {
     var gap = jumpGap(), x0 = W + 60;
-    for (var i = 0; i < p.obs.length; i++) spawnObstacleAt(x0 + p.obs[i].dx * gap, p.obs[i].big);
+    for (var i = 0; i < p.obs.length; i++) spawnObstacleAt(x0 + p.obs[i].dx * gap, p.obs[i].t || "tall");
     for (var j = 0; j < p.items.length; j++) {
       var it = p.items[j], c = COLLECTIBLES[weightedItem()];
       items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
@@ -842,7 +850,9 @@
   function update(dt) {
     // speed ramps up slowly
     speed = Math.min(MAX_SPEED, speed + dt * 10);   // steady accel; tops out much higher now
-    var move = speed * dt;
+    if (boostTimer > 0) boostTimer -= dt;
+    if (jumpLock > 0) jumpLock -= dt;
+    var move = speed * (boostTimer > 0 ? 1.5 : 1) * dt;   // oil slick speeds the world up
     world.scroll += move;
     dist += move / 6;   // 6px ≈ 1 "公分"
 
@@ -881,15 +891,15 @@
       var o = obstacles[i];
       o.x -= move;
       if (o.x + o.w < -40) { obstacles.splice(i, 1); continue; }
-      // track how tightly the baby cleared this obstacle (for Good/Perfect)
-      if (!o.hit && !baby.onGround) {
+      // track how tightly the baby cleared this hazard (damaging ones, for Good/Perfect)
+      if (o.dmg && !o.hit && !baby.onGround) {
         var bbm = babyBox(), obTop = o.y - o.h;
         if (bbm.x < o.x + o.w / 2 && bbm.x + bbm.w > o.x - o.w / 2) {
           var clr = obTop - (bbm.y + bbm.h);   // baby's bottom vs obstacle top
           if (clr >= 0) o.minGap = (o.minGap == null) ? clr : Math.min(o.minGap, clr);
         }
       }
-      if (!o.hit && !o.passed && o.x < baby.x - o.w / 2) {
+      if (o.dmg && !o.hit && !o.passed && o.x < baby.x - o.w / 2) {
         o.passed = true;
         if (!baby.onGround) {
           bumpStat("nearmiss", 1);
@@ -907,7 +917,16 @@
         var ob = { x: o.x - o.w / 2, y: o.y - o.h, w: o.w, h: o.h };
         if (overlap(babyBox(), ob)) {
           o.hit = true;
-          if (shield) {
+          if (!o.dmg && o.eff === "slip") {
+            // banana peel: stumble (no damage) — light-hop over it to avoid
+            combo = 0; perfectStreak = 0; jumpLock = 0.45; shake = 8; sfxHit();
+            popups.push({ x: baby.x + 10, y: baby.y - 78, text: "滑倒～🍌", life: 1.0, color: "#e0a000" });
+          } else if (!o.dmg && o.eff === "oil") {
+            // oil slick: a risky speed-up burst
+            boostTimer = 1.6; shake = 6;
+            popups.push({ x: baby.x + 10, y: baby.y - 78, text: "油加速! ⛽", life: 1.0, color: "#ff7a3c" });
+            for (var op = 0; op < 6; op++) particles.push({ x: baby.x, y: baby.y - 6, vx: -(80 + Math.random() * 120), vy: -20 - Math.random() * 30, g: 200, life: 0.4, color: "#3a3f49", sz: 3 });
+          } else if (shield) {
             shield = false; invuln = 0.9;
             burst(baby.x, baby.y - 24, "#7cc8ff"); sfxPower();
             showToast("護盾擋下了！🛡️");
@@ -1452,7 +1471,38 @@
     ctx.restore();
   }
 
-  function drawObstacle(o) { drawHazard(o); }
+  function drawObstacle(o) {
+    if (o.type === "banana") drawBanana(o);
+    else if (o.type === "oil") drawOil(o);
+    else drawHazard(o);
+  }
+  function drawBanana(o) {
+    var cx = o.x, by = o.y;
+    ctx.save();
+    ctx.fillStyle = "rgba(40,25,10,0.22)"; ctx.beginPath(); ctx.ellipse(cx, by + 4, 22, 5, 0, 0, 6.28); ctx.fill();
+    // peel: a yellow body with three splayed flaps
+    ctx.fillStyle = "#ffd23f"; ctx.strokeStyle = "#d99a16"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx, by - 5, 12, 7, 0, 0, 6.28); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#ffe27a";
+    for (var f = -1; f <= 1; f++) {
+      ctx.save(); ctx.translate(cx, by - 6); ctx.rotate(f * 0.8);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(f * 6, -16, f * 20, -6); ctx.quadraticCurveTo(f * 8, -4, 0, 2); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = "#9b6b1e"; ctx.fillRect(cx - 1.5, by - 16, 3, 6);
+    ctx.restore();
+  }
+  function drawOil(o) {
+    var cx = o.x, by = o.y;
+    ctx.save();
+    ctx.fillStyle = "rgba(20,18,26,0.85)";
+    ctx.beginPath(); ctx.ellipse(cx, by - 3, o.w / 2, 8, 0, 0, 6.28); ctx.fill();
+    // rainbow sheen
+    var sheen = ["rgba(120,200,255,0.35)", "rgba(180,140,255,0.3)", "rgba(140,255,200,0.3)"];
+    for (var s = 0; s < 3; s++) { ctx.fillStyle = sheen[s]; ctx.beginPath(); ctx.ellipse(cx - 10 + s * 9, by - 4 - s, 8 - s * 1.5, 3, 0, 0, 6.28); ctx.fill(); }
+    ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.beginPath(); ctx.ellipse(cx - 12, by - 6, 4, 1.6, 0, 0, 6.28); ctx.fill();
+    ctx.restore();
+  }
   // a clearly-dangerous spiky, angry creature — never mistaken for a coin
   function drawHazard(o) {
     var bob = Math.sin((world.scroll + o.x) * 0.04) * 2;
