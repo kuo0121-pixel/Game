@@ -507,7 +507,7 @@
 
   // ---------- State ----------
   var state = "start";  // start | playing | over
-  var baby, world, items, obstacles, particles, popups;
+  var baby, world, items, obstacles, particles, popups, platforms;
   var shake = 0, flash = 0;
   var skyGrad = null, dirtGrad = null, coinGlow = null;
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
@@ -665,6 +665,7 @@
     world = { scroll: 0 };
     items = [];
     obstacles = [];
+    platforms = [];
     particles = [];
     popups = [];
     shake = 0; flash = 0;
@@ -894,15 +895,19 @@
     // 10 oil slick then spiker: hop the oil or get sped into the spike
     { obs: [{ dx: 0, t: "oil" }, { dx: 1.2, t: "tall" }], items: [{ dx: 0.6, dy: HI }], rest: 1.5 },
     // 11 mixed lows then a wall
-    { obs: [{ dx: 0, t: "low" }, { dx: 1, t: "low" }, { dx: 2, t: "tall" }], items: [{ dx: 1.5, dy: HI }], rest: 1.4 }
+    { obs: [{ dx: 0, t: "low" }, { dx: 1, t: "low" }, { dx: 2, t: "tall" }], items: [{ dx: 1.5, dy: HI }], rest: 1.4 },
+    // 12 floating platform with a coin row up top (jump onto it), low hazard below
+    { obs: [{ dx: 0, t: "low" }], items: [{ dx: 0.62, dy: 112 }, { dx: 0.94, dy: 112 }, { dx: 1.26, dy: 112 }], plats: [{ dx: 0.5, top: 100, w: 200 }], rest: 1.6 },
+    // 13 stepping platform with reward, then a ground coin
+    { obs: [], items: [{ dx: 0.4, dy: 104 }, { dx: 0.8, dy: 104 }, { dx: 1.7, dy: HI }], plats: [{ dx: 0.3, top: 92, w: 160 }], rest: 1.5 }
   ];
   // which patterns are allowed at each distance tier (ramps up the pressure)
   function allowedPatterns() {
     if (dist < 400)  return [0, 2, 5, 8, 0];
-    if (dist < 1200) return [0, 1, 4, 2, 6, 5, 8, 9];
-    if (dist < 2500) return [1, 3, 4, 6, 8, 10, 9, 2];
-    if (dist < 5000) return [3, 1, 6, 4, 7, 11, 10, 9];
-    return [3, 7, 6, 11, 7, 10, 3];   // very high distance: dense, relentless
+    if (dist < 1200) return [0, 1, 4, 2, 6, 5, 8, 9, 13];
+    if (dist < 2500) return [1, 3, 4, 6, 8, 10, 9, 12, 13];
+    if (dist < 5000) return [3, 1, 6, 4, 7, 11, 10, 12, 9];
+    return [3, 7, 6, 11, 7, 10, 12, 3];   // very high distance: dense, relentless
   }
   // spacing tightens with distance (0.82 -> 0.66 of a jump arc) so the late
   // game demands precise jumps while staying just barely clearable.
@@ -910,6 +915,10 @@
   function spawnPattern(p) {
     var gap = jumpGap(), x0 = W + 60;
     for (var i = 0; i < p.obs.length; i++) spawnObstacleAt(x0 + p.obs[i].dx * gap, p.obs[i].t || "tall");
+    if (p.plats) for (var pp = 0; pp < p.plats.length; pp++) {
+      var pl = p.plats[pp];
+      platforms.push({ x: x0 + pl.dx * gap, y: GROUND_Y - pl.top, w: pl.w });
+    }
     for (var j = 0; j < p.items.length; j++) {
       var it = p.items[j], c = COLLECTIBLES[weightedItem()];
       items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
@@ -918,6 +927,7 @@
     var rest = p.rest * (1 - Math.min(0.55, dist / 14000));
     var span = rest;
     for (var k = 0; k < p.obs.length; k++) span = Math.max(span, p.obs[k].dx + rest);
+    if (p.plats) for (var s = 0; s < p.plats.length; s++) span = Math.max(span, p.plats[s].dx + p.plats[s].w / gap + rest);
     return span * gap / speed;  // seconds until the next segment should drop
   }
   function director(dt) {
@@ -982,12 +992,25 @@
     world.scroll += move;
     dist += move / 6;   // 6px ≈ 1 "公分"
 
+    // move & cull floating platforms (so the floor check uses current positions)
+    for (var plm = platforms.length - 1; plm >= 0; plm--) {
+      platforms[plm].x -= move;
+      if (platforms[plm].x + platforms[plm].w < -60) platforms.splice(plm, 1);
+    }
+
     // baby physics — heavier gravity on the way down for a crisp, dino-like arc
     var wasGround = baby.onGround;
+    var prevY = baby.y;
     baby.vy += (baby.vy > 0 ? GRAVITY * FALL_MUL : GRAVITY) * dt;
     baby.y += baby.vy * dt;
-    if (baby.y >= GROUND_Y) {
-      baby.y = GROUND_Y; baby.vy = 0;
+    // dynamic floor: the ground, or a one-way platform the feet are dropping onto
+    var floorY = GROUND_Y;
+    for (var pf = 0; pf < platforms.length; pf++) {
+      var pl = platforms[pf];
+      if (baby.x > pl.x && baby.x < pl.x + pl.w && baby.vy >= 0 && prevY <= pl.y + 1 && baby.y >= pl.y && pl.y < floorY) floorY = pl.y;
+    }
+    if (baby.y >= floorY) {
+      baby.y = floorY; baby.vy = 0; baby.floor = floorY;
       if (!wasGround) baby.squash = Math.max(baby.squash, 0.5);   // landing squash
       baby.onGround = true; baby.jumps = 0;
       if (jumpBuf > 0) doJump();                                  // buffered jump fires on landing
@@ -1235,6 +1258,7 @@
     if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
     drawBackground();
     drawGround();
+    for (var pi = 0; pi < platforms.length; pi++) drawPlatform(platforms[pi]);
     for (var i = 0; i < items.length; i++) drawItem(items[i]);
     for (var o = 0; o < obstacles.length; o++) drawObstacle(obstacles[o]);
     drawChaser();
@@ -1848,6 +1872,18 @@
   }
 
   // ---------- Cute baby (canvas vector) ----------
+  // a cute grassy floating ledge you can hop onto
+  function drawPlatform(p) {
+    var x = p.x, y = p.y, w = p.w, h = 20;
+    ctx.save();
+    ctx.fillStyle = "rgba(40,30,15,0.12)"; roundRectPath(x + 6, y + 9, w - 12, h, 10); ctx.fill();
+    ctx.fillStyle = "#c4823e"; roundRectPath(x, y + 6, w, h, 10); ctx.fill();
+    ctx.fillStyle = "#74d65c"; roundRectPath(x, y, w, 13, 8); ctx.fill();
+    ctx.fillStyle = "#52b840"; ctx.fillRect(x + 4, y + 10, w - 8, 4);
+    ctx.fillStyle = "#8fe878";
+    for (var gx = x + 8; gx < x + w - 6; gx += 22) { ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + 4, y - 6); ctx.lineTo(gx + 8, y); ctx.fill(); }
+    ctx.restore();
+  }
   // the cartoon "boss mama" who chases when 柏宇 keeps slipping up
   function drawChaser() {
     if (!chaser || chaser.threat <= 0.1) return;
@@ -1902,8 +1938,9 @@
     // soft drop shadow on the ground
     ctx.fillStyle = "rgba(40,30,15," + (flying ? 0.1 : 0.18) + ")";
     var shScale = baby.onGround ? 1 : 0.7;
+    var shY = (baby.onGround ? y : GROUND_Y) + 6;   // shadow rests on the platform/ground under 柏宇
     ctx.beginPath();
-    ctx.ellipse(x, GROUND_Y + 6, (flying ? 34 : 46) * shScale, 8 * shScale, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, shY, (flying ? 34 : 46) * shScale, 8 * shScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // ground dust only when actually crawling/walking
