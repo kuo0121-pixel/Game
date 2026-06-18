@@ -81,6 +81,22 @@
   .stat { background: #fff7ea; border-radius: 14px; padding: 10px 18px; box-shadow: 0 3px 0 #e6d4b3; }
   .stat .num { font-size: clamp(22px, 4vw, 34px); font-weight: 800; color: #d98344; }
   .stat .lbl { font-size: 12px; color: #a8916c; margin-top: 2px; }
+  /* mission panel */
+  .missions { display: flex; flex-direction: column; gap: 6px; width: min(92vw, 420px); margin: 2px 0; }
+  .m-head { font-size: 12px; font-weight: 800; color: #c98a4b; text-align: left; margin-top: 2px; }
+  .m-alldone { font-size: 14px; font-weight: 800; color: #d98344; }
+  .mission {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff7ea; border-radius: 12px; padding: 6px 10px;
+    box-shadow: 0 2px 0 #e6d4b3; font-size: 13px; color: #8a7656;
+  }
+  .mission.done { background: #eafbe9; box-shadow: 0 2px 0 #bfe7b6; color: #4f9a4a; }
+  .m-ic { font-size: 17px; flex: 0 0 auto; }
+  .m-lb { flex: 1 1 auto; text-align: left; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-bar { flex: 0 0 70px; height: 8px; background: #ecd9b8; border-radius: 999px; overflow: hidden; }
+  .m-fill { display: block; height: 100%; background: linear-gradient(90deg, #ffd23f, #f0a93c); border-radius: 999px; }
+  .m-val { flex: 0 0 auto; font-size: 11px; font-weight: 800; color: #b08a55; min-width: 46px; text-align: right; }
+  .m-ck { flex: 0 0 auto; font-weight: 800; color: #4f9a4a; }
   .badge-line { font-size: clamp(13px,2.6vw,18px); color:#6b8e4e; font-weight:700; min-height: 1.4em; }
 
   /* HUD */
@@ -132,6 +148,7 @@
       收集 🍼 奶瓶、🦷 固齒器、🧸 玩具，<br>
       閃避巡邏的 🤖 掃地機器人和散落的 🛋️ 抱枕。
     </div>
+    <div class="missions" id="missions"></div>
     <button class="btn" id="startBtn">開始爬行！</button>
     <div class="hint">電腦：空白鍵 / ↑ 跳　　手機：點畫面跳</div>
   </div>
@@ -145,6 +162,7 @@
       <div class="stat"><div class="num" id="bestScore">0</div><div class="lbl">最佳紀錄</div></div>
     </div>
     <div class="badge-line" id="badgeLine"></div>
+    <div class="missions" id="overMissions"></div>
     <button class="btn" id="retryBtn">再爬一次！</button>
   </div>
 </div>
@@ -213,6 +231,8 @@
   var overTitleEl = document.getElementById("overTitle");
   var overFaceEl  = document.getElementById("overFace");
   var muteBtn     = document.getElementById("muteBtn");
+  var missionsEl  = document.getElementById("missions");
+  var overMissionsEl = document.getElementById("overMissions");
 
   // ---------- Audio (tiny WebAudio blips) ----------
   var muted = false, audioCtx = null;
@@ -344,8 +364,88 @@
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
   var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer;
   var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel;
+  var birthdayBurst, runCompleted;
 
   best = parseInt(localStorage.getItem("baiyu_best") || "0", 10) || 0;
+
+  // ---------- Missions / achievements (persisted) ----------
+  var MISSIONS = [
+    { id: "bottles",  icon: "🍼", label: "收集 50 個奶瓶",       goal: 50,   stat: "bottles" },
+    { id: "chips",    icon: "💠", label: "收集 10 個 DDIC 晶片",  goal: 10,   stat: "chips" },
+    { id: "nearmiss", icon: "😅", label: "「好險！」閃避 20 次",  goal: 20,   stat: "nearmiss" },
+    { id: "distance", icon: "🐢", label: "累積爬行 5000 公分",    goal: 5000, stat: "distance" },
+    { id: "birthday", icon: "🎂", label: "單場爬到 1018 公分 🎂", goal: 1018, stat: "bestrun" }
+  ];
+  var stats, doneM;
+  function loadStats() {
+    try { stats = JSON.parse(localStorage.getItem("baiyu_stats") || "{}"); } catch (e) { stats = {}; }
+    try { doneM = JSON.parse(localStorage.getItem("baiyu_done") || "[]"); } catch (e) { doneM = []; }
+    if (!stats || typeof stats !== "object") stats = {};
+    if (!Array.isArray(doneM)) doneM = [];
+  }
+  function saveStats() {
+    try { localStorage.setItem("baiyu_stats", JSON.stringify(stats)); localStorage.setItem("baiyu_done", JSON.stringify(doneM)); } catch (e) {}
+  }
+  loadStats();
+  // current value of a stat, blending persisted lifetime totals with the live run
+  function statValue(name) {
+    var live = (state === "playing") ? Math.floor(dist) : 0;
+    if (name === "distance") return (stats.distance || 0) + live;
+    if (name === "bestrun")  return Math.max(stats.bestrun || 0, live);
+    return stats[name] || 0;
+  }
+  function bumpStat(name, n) { stats[name] = (stats[name] || 0) + n; }
+  function checkMissions() {
+    for (var i = 0; i < MISSIONS.length; i++) {
+      var m = MISSIONS[i];
+      if (doneM.indexOf(m.id) >= 0) continue;
+      if (statValue(m.stat) >= m.goal) {
+        doneM.push(m.id); runCompleted.push(m); saveStats();
+        showToast("✨ 任務完成：" + m.label);
+        sfxFanfare();
+        var cfc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3"];
+        for (var c = 0; c < 26; c++) { var a = Math.random() * 6.28, s = 90 + Math.random() * 160; particles.push({ x: W / 2, y: 70, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, g: 360, life: 1.2, confetti: true, color: cfc[(Math.random() * 5) | 0] }); }
+      }
+    }
+  }
+  // is today 柏宇's birthday (10/18)? then every run is a party
+  var isBirthday = (function () { var d = new Date(); return d.getMonth() === 9 && d.getDate() === 18; })();
+  function birthdayParty() {
+    if (birthdayBurst > 0) return;
+    birthdayBurst = 3.5;
+    coolMode = true;
+    showToast("🎂 生日快樂 柏宇！");
+    if (hearts < 3) { hearts++; updateHUD(); popups.push({ x: baby.x, y: baby.y - 96, text: "+❤️", life: 1.1, color: "#ff5a6e" }); }
+    var cfc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3"];
+    for (var c = 0; c < 40; c++) { var a = Math.random() * 6.28, s = 90 + Math.random() * 190; particles.push({ x: W / 2, y: 60, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 70, g: 360, life: 1.3, confetti: true, color: cfc[(Math.random() * 5) | 0] }); }
+    sfxFanfare();
+  }
+  // render the mission panel on the start ("start") or game-over ("over") screen
+  function renderMissions(el, mode) {
+    if (!el) return;
+    var html = "";
+    if (mode === "over" && runCompleted.length) {
+      html += '<div class="m-head">✨ 本場完成任務</div>';
+      for (var i = 0; i < runCompleted.length; i++) {
+        html += '<div class="mission done"><span class="m-ic">' + runCompleted[i].icon + '</span><span class="m-lb">' + runCompleted[i].label + '</span><span class="m-ck">✓</span></div>';
+      }
+      html += '<div class="m-head">下一個目標</div>';
+    }
+    var shown = 0;
+    for (var j = 0; j < MISSIONS.length && shown < 3; j++) {
+      var m = MISSIONS[j];
+      if (doneM.indexOf(m.id) >= 0) continue;
+      var cur = Math.min(statValue(m.stat), m.goal), pct = Math.round(cur / m.goal * 100);
+      html += '<div class="mission"><span class="m-ic">' + m.icon + '</span>' +
+              '<span class="m-lb">' + m.label + '</span>' +
+              '<span class="m-bar"><span class="m-fill" style="width:' + pct + '%"></span></span>' +
+              '<span class="m-val">' + cur + '/' + m.goal + '</span></div>';
+      shown++;
+    }
+    if (shown === 0) html += '<div class="m-alldone">🎉 所有任務都完成了，柏宇超棒！</div>';
+    el.innerHTML = html;
+  }
+  renderMissions(missionsEl, "start");   // initial paint (stats loaded above)
 
   function reset() {
     baby = { x: 150, y: GROUND_Y, vy: 0, onGround: true, anim: 0, squash: 0, jumps: 0 };
@@ -359,7 +459,8 @@
     spawnTimer = 1.2; itemTimer = 0.7; invuln = 0; milestoneIdx = 0;
     combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9;
     coyote = 0; jumpBuf = 0; hitstop = 0; scoreShown = 0; segTimer = 1.0; segLevel = 0;
-    coolMode = false;
+    birthdayBurst = 0; runCompleted = [];
+    coolMode = isBirthday;   // every run is a party on the real birthday
     pickFace();
     updateHUD();
   }
@@ -618,7 +719,7 @@
       if (!o.hit && !o.passed && o.x < baby.x - o.w / 2) {
         o.passed = true;
         if (!baby.onGround) {
-          score += 5;
+          score += 5; bumpStat("nearmiss", 1);
           popups.push({ x: baby.x + 18, y: baby.y - 78, text: "好險!", life: 0.9, color: "#36c46a" });
           for (var nm = 0; nm < 4; nm++) particles.push({ x: o.x, y: baby.y - 34, vx: (Math.random() - 0.5) * 70, vy: -45, g: 200, life: 0.4, color: "#aef0c0", star: true, sz: 3 });
         }
@@ -668,6 +769,8 @@
             showToast("獲得 " + it.powerName);
           } else {
             combo++; comboTimer = 2.5;
+            if (it.kind === "bottle") bumpStat("bottles", 1);
+            else if (it.kind === "chip") bumpStat("chips", 1);
             var mult = 1 + Math.floor(combo / 4);
             var gain = it.points * mult;
             score += gain; dist += gain * 0.4;
@@ -693,8 +796,16 @@
       sfxFanfare();
       var cfc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3"];
       for (var cf = 0; cf < 30; cf++) { var ca = Math.random() * 6.28, cs = 90 + Math.random() * 170; particles.push({ x: W / 2, y: 60, vx: Math.cos(ca) * cs, vy: Math.sin(ca) * cs - 70, g: 360, life: 1.2, confetti: true, color: cfc[(Math.random() * 5) | 0] }); }
-      if (ms.msg.indexOf("生日") >= 0) { coolMode = true; showToast("解鎖：柏宇酷酷墨鏡 😎"); }
+      if (ms.msg.indexOf("生日") >= 0) { birthdayParty(); }
       milestoneIdx++;
+    }
+
+    // mission progress + birthday party visuals
+    checkMissions();
+    if (birthdayBurst > 0) {
+      birthdayBurst -= dt;
+      if (Math.random() < 0.5) particles.push({ x: 30 + Math.random() * (W - 60), y: H - 40, vx: (Math.random() - 0.5) * 30, vy: -70 - Math.random() * 50, g: -20, life: 2.2, emoji: true, ch: "🎈", sz: 26 });
+      if (Math.random() < 0.18) particles.push({ x: baby.x + (Math.random() - 0.5) * 60, y: baby.y - 90, vx: (Math.random() - 0.5) * 20, vy: -30, g: 30, life: 1.4, emoji: true, ch: "🎂", sz: 22 });
     }
 
     // ambient cuteness: sky twinkles + heart trail
@@ -727,6 +838,13 @@
     finalScoreEl.textContent = total;
     if (total > best) { best = total; localStorage.setItem("baiyu_best", String(best)); }
     bestScoreEl.textContent = best;
+
+    // commit this run into lifetime mission stats, finalize and persist
+    stats.distance = (stats.distance || 0) + total;
+    stats.bestrun = Math.max(stats.bestrun || 0, total);
+    checkMissions();
+    saveStats();
+    renderMissions(overMissionsEl, "over");
 
     // badge based on distance — playful "future achievement" tie-in
     var badge;
@@ -1127,6 +1245,13 @@
         else ctx.rect(0, -p.sz * 1.4, p.sz * 1.3, p.sz * 2.8);
         ctx.clip();
         drawHeart(0, 0, p.sz);
+        ctx.restore();
+      } else if (p.emoji) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+        ctx.font = (p.sz || 22) + "px serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(p.ch, p.x, p.y);
         ctx.restore();
       } else if (p.heart) {
         drawHeart(p.x, p.y, p.sz || 7);
