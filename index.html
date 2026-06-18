@@ -739,22 +739,27 @@
     var bob = Math.sin((world.scroll + o.x) * 0.03) * 3;
     ctx.save();
     if (o.hit) ctx.globalAlpha = 0.4;
-    // pulsing danger glow so it reads as a threat, not scenery
-    var pulse = (0.14 + 0.10 * (0.5 + 0.5 * Math.sin(world.scroll * 0.12))).toFixed(3);
-    ctx.fillStyle = "rgba(255,70,70," + pulse + ")";
-    ctx.beginPath(); ctx.arc(o.x, o.y - o.h * 0.45 + bob, o.w * 0.62, 0, Math.PI * 2); ctx.fill();
-    // little base platform on the ground
-    ctx.fillStyle = "#8a5a2a";
-    roundRectPath(o.x - o.w * 0.5, o.y - 9, o.w, 13, 5); ctx.fill();
-    ctx.fillStyle = "#6e4620";
-    roundRectPath(o.x - o.w * 0.5, o.y - 2, o.w, 6, 4); ctx.fill();
+    // dark hazard base on the ground
+    ctx.fillStyle = "#5a3a18";
+    roundRectPath(o.x - o.w * 0.58, o.y - 7, o.w * 1.16, 13, 5); ctx.fill();
     // contact shadow
-    ctx.fillStyle = "rgba(40,25,10,0.22)";
-    ctx.beginPath(); ctx.ellipse(o.x, o.y + 5, o.w * 0.5, 6, 0, 0, Math.PI * 2); ctx.fill();
-    // emoji
-    ctx.font = (o.h * 1.05) + "px serif";
+    ctx.fillStyle = "rgba(40,25,10,0.28)";
+    ctx.beginPath(); ctx.ellipse(o.x, o.y + 5, o.w * 0.6, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // bigger emoji so it reads at a glance
+    ctx.font = (o.h * 1.4) + "px serif";
     ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-    ctx.fillText(o.emoji, o.x, o.y + 2 + bob);
+    ctx.fillText(o.emoji, o.x, o.y + 4 + bob);
+    // pulsing RED hazard ring — clearly "avoid", not a coin
+    var lw = 3.5 + 1.8 * Math.sin(world.scroll * 0.2);
+    ctx.lineWidth = lw < 1 ? 1 : lw;
+    ctx.strokeStyle = "rgba(235,35,35,0.92)";
+    ctx.beginPath();
+    ctx.ellipse(o.x, o.y - o.h * 0.55 + bob, o.w * 0.66, o.h * 0.82, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // warning sign bobbing above the hazard
+    ctx.font = "26px serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText("⚠️", o.x, o.y - o.h * 1.5 - 6 + Math.sin(world.scroll * 0.12) * 3);
     ctx.restore();
   }
 
@@ -791,7 +796,7 @@
 
     // crawl dust puffs
     if (state === "playing" && baby.onGround && Math.random() < 0.3) {
-      particles.push({ x: x + 20, y: GROUND_Y + 2, vx: 40 + Math.random() * 30, vy: -15 - Math.random() * 20, life: 0.4, color: "rgba(225,205,170,0.9)", sz: 3 });
+      particles.push({ x: x - 22, y: GROUND_Y + 2, vx: -(40 + Math.random() * 30), vy: -15 - Math.random() * 20, life: 0.4, color: "rgba(225,205,170,0.9)", sz: 3 });
     }
 
     ctx.save();
@@ -799,7 +804,7 @@
     var swing = Math.sin(baby.anim) * 7;
     var squash = 1 - baby.squash * 0.35;
     ctx.translate(x, y);
-    ctx.scale(1, squash);
+    ctx.scale(-1, squash);   // face right (direction of travel)
 
     // back legs (behind body)
     ctx.lineCap = "round";
@@ -826,8 +831,8 @@
     arm(-20, -22, 6 - swing);
 
     // head — photo of 柏宇, slim ring, anchored on the body
-    var hr = 27;
-    var hx = -32, hy = -44 + Math.sin(baby.anim) * 1.5;
+    var hr = 35;
+    var hx = -28, hy = -50 + Math.sin(baby.anim) * 1.5;
     if (currentFace) {
       // neck/overlap shadow into torso
       ctx.fillStyle = "rgba(40,30,15,0.10)";
@@ -835,10 +840,11 @@
       // slim white ring
       ctx.fillStyle = "#fff";
       ctx.beginPath(); ctx.arc(hx, hy, hr + 3, 0, Math.PI * 2); ctx.fill();
-      // photo
+      // photo (un-mirror so the face isn't flipped by the body's facing)
       ctx.save();
       ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.clip();
-      ctx.drawImage(currentFace, hx - hr, hy - hr, hr * 2, hr * 2);
+      ctx.translate(hx, hy); ctx.scale(-1, 1);
+      ctx.drawImage(currentFace, -hr, -hr, hr * 2, hr * 2);
       ctx.restore();
       // thin gold accent
       ctx.lineWidth = 2.5; ctx.strokeStyle = "#ffcf33";
