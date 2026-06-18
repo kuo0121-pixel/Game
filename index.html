@@ -400,7 +400,7 @@
   var FALL_MUL = 1.15;             // extra gravity while descending (crisp landing)
   var JUMP_V   = -840;             // initial jump velocity (peak ≈ 141px, airtime ≈ 0.63s)
   var BASE_SPEED = 280;            // px/s world speed at start
-  var MAX_SPEED  = 620;
+  var MAX_SPEED  = 1050;           // keeps ramping so the late game stays challenging
 
   // Collectible & obstacle defs
   var COLLECTIBLES = [
@@ -788,7 +788,7 @@
 
   function update(dt) {
     // speed ramps up slowly
-    speed = Math.min(MAX_SPEED, speed + dt * 9);
+    speed = Math.min(MAX_SPEED, speed + dt * 10);   // steady accel; tops out much higher now
     var move = speed * dt;
     world.scroll += move;
     dist += move / 6;   // 6px ≈ 1 "公分"
