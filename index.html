@@ -534,7 +534,7 @@
   var shake = 0, flash = 0;
   var skyGrad = null, dirtGrad = null, coinGlow = null;
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
-  var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer;
+  var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer, doubleTimer, slowTimer;
   var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel, dayClock;
   var nightF = 0, warmF = 0;   // day/night lighting factors (computed each frame)
   var birthdayBurst, runCompleted, mountIdx, perfectStreak, boostTimer, jumpLock, chaser;
@@ -695,7 +695,7 @@
     shake = 0; flash = 0;
     score = 0; dist = 0; hearts = 3; speed = BASE_SPEED;
     spawnTimer = 1.2; itemTimer = 0.7; invuln = 0; milestoneIdx = 0;
-    combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9;
+    combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9; doubleTimer = 0; slowTimer = 0;
     coyote = 0; jumpBuf = 0; hitstop = 0; scoreShown = 0; segTimer = 1.0; segLevel = 0; dayClock = 0;
     birthdayBurst = 0; runCompleted = []; mountIdx = 0; perfectStreak = 0; boostTimer = 0; jumpLock = 0;
     chaser = { threat: 0, anim: 0, say: "", sayT: 0 };
@@ -888,7 +888,9 @@
       { power: "shield",  powerName: "護盾",   kind: "pshield",  w: 2 },
       { power: "magnet",  powerName: "磁鐵",   kind: "pmagnet",  w: 2 },
       { power: "star",    powerName: "無敵星", kind: "pstar",    w: 1.5 },
-      { power: "heart",   powerName: "愛心",   kind: "pheart",   w: 1.5 }
+      { power: "heart",   powerName: "愛心",   kind: "pheart",   w: 1.5 },
+      { power: "x2",      powerName: "雙倍分數", kind: "px2",    w: 1.5 },
+      { power: "slow",    powerName: "慢動作", kind: "pslow",    w: 1.5 }
     ];
     var tot = 0, i; for (i = 0; i < types.length; i++) tot += types[i].w;
     var r = Math.random() * tot, t = types[0];
@@ -905,11 +907,13 @@
       score += 50; dist += 20; return "愛心滿滿！+50 分";
     }
     else if (p === "bonus") { score += 60; dist += 24; return "獎勵糖果 +60 分！"; }
+    else if (p === "x2") { doubleTimer = 9; return "雙倍分數！×2 ✨"; }
+    else if (p === "slow") { slowTimer = 5; return "慢動作～閃避更輕鬆 🐢"; }
     else if (p === "mystery") {
-      var pool = ["shield", "magnet", "star", "heart", "bonus"];
+      var pool = ["shield", "magnet", "star", "heart", "bonus", "x2", "slow"];
       var pick = pool[(Math.random() * pool.length) | 0];
       var sub = applyPower(pick);
-      var names = { shield: "護盾 🛡️", magnet: "磁鐵 🧲", star: "無敵星 ⭐", heart: "愛心 ❤️", bonus: "加分 ✨" };
+      var names = { shield: "護盾 🛡️", magnet: "磁鐵 🧲", star: "無敵星 ⭐", heart: "愛心 ❤️", bonus: "加分 ✨", x2: "雙倍分數 ✨", slow: "慢動作 🐢" };
       return "🎁 驚喜盒抽到：" + (sub || names[pick]);
     }
     return null;
@@ -921,20 +925,36 @@
   // speed and stays clearable (you always land before the next wall). Item dy
   // is in pixels above the ground line. `rest` is the trailing breather (units)
   // before the next segment begins.
-  var HI = 132, LO = 18;  // common item heights (jump vs. crawl)
+  var HI = 130, MID = 78, LO = 20;  // standard collectible heights (clean, consistent)
+  // a tidy parabolic run of coins that traces a jump arc
+  function coinArc(startDx, span, n, peak, base) {
+    base = (base == null) ? 24 : base;
+    var arr = [];
+    for (var i = 0; i < n; i++) {
+      var t = (n === 1) ? 0.5 : i / (n - 1);
+      arr.push({ dx: startDx + t * span, dy: base + (peak - base) * (1 - (2 * t - 1) * (2 * t - 1)) });
+    }
+    return arr;
+  }
+  // an evenly-spaced horizontal row of coins at one height
+  function coinRow(startDx, span, n, dy) {
+    var arr = [];
+    for (var i = 0; i < n; i++) arr.push({ dx: startDx + (n === 1 ? 0 : (i / (n - 1)) * span), dy: dy });
+    return arr;
+  }
   var PATTERNS = [
     // 0 single hop + reward overhead
     { obs: [{ dx: 0 }], items: [{ dx: 0, dy: HI }], rest: 1.4 },
     // 1 two hops, coin tucked between
     { obs: [{ dx: 0 }, { dx: 1 }], items: [{ dx: 0.5, dy: LO }], rest: 1.5 },
-    // 2 coin arc, no obstacle (breather)
-    { obs: [], items: [{ dx: 0, dy: 60 }, { dx: 0.35, dy: 110 }, { dx: 0.7, dy: 110 }, { dx: 1.05, dy: 60 }], rest: 1.0 },
-    // 3 triple stair of hops, coins up high to reward jumps
-    { obs: [{ dx: 0 }, { dx: 1 }, { dx: 2 }], items: [{ dx: 0.5, dy: HI }, { dx: 1.5, dy: HI }], rest: 1.6 },
+    // 2 a clean parabolic coin arc tracing a jump (breather)
+    { obs: [], items: coinArc(0.0, 1.2, 6, HI, LO), rest: 1.0 },
+    // 3 triple stair of hops, an even high coin row to reward jumps
+    { obs: [{ dx: 0 }, { dx: 1 }, { dx: 2 }], items: coinRow(0.5, 1.0, 2, HI), rest: 1.6 },
     // 4 big single you must clear (hold for height), coin sitting on top
     { obs: [{ dx: 0, t: "bigtall" }], items: [{ dx: 0, dy: HI + 10 }], rest: 1.5 },
-    // 5 gentle rest: low coins only
-    { obs: [], items: [{ dx: 0, dy: LO }, { dx: 0.5, dy: LO }, { dx: 1.0, dy: 70 }], rest: 0.9 },
+    // 5 gentle rest: a soft low coin arc
+    { obs: [], items: coinArc(0.0, 1.1, 4, MID, LO), rest: 0.9 },
     // 6 stutter: hop, slightly longer gap, big hop
     { obs: [{ dx: 0 }, { dx: 1.4, t: "bigtall" }], items: [{ dx: 0.7, dy: HI }], rest: 1.6 },
     // 7 quad hops, tight, little reward (high-pressure late game)
@@ -947,10 +967,10 @@
     { obs: [{ dx: 0, t: "oil" }, { dx: 1.2, t: "tall" }], items: [{ dx: 0.6, dy: HI }], rest: 1.5 },
     // 11 mixed lows then a wall
     { obs: [{ dx: 0, t: "low" }, { dx: 1, t: "low" }, { dx: 2, t: "tall" }], items: [{ dx: 1.5, dy: HI }], rest: 1.4 },
-    // 12 floating platform with a coin row up top (jump onto it), low hazard below
-    { obs: [{ dx: 0, t: "low" }], items: [{ dx: 0.62, dy: 112 }, { dx: 0.94, dy: 112 }, { dx: 1.26, dy: 112 }], plats: [{ dx: 0.5, top: 100, w: 200 }], rest: 1.6 },
-    // 13 stepping platform with reward, then a ground coin
-    { obs: [], items: [{ dx: 0.4, dy: 104 }, { dx: 0.8, dy: 104 }, { dx: 1.7, dy: HI }], plats: [{ dx: 0.3, top: 92, w: 160 }], rest: 1.5 }
+    // 12 floating platform with an even coin row on top, low hazard below
+    { obs: [{ dx: 0, t: "low" }], items: coinRow(0.62, 0.64, 3, 112), plats: [{ dx: 0.5, top: 100, w: 200 }], rest: 1.6 },
+    // 13 stepping platform with an even coin row reward
+    { obs: [], items: coinRow(0.36, 0.5, 3, 104), plats: [{ dx: 0.3, top: 92, w: 160 }], rest: 1.5 }
   ];
   // which patterns are allowed at each distance tier (ramps up the pressure)
   function allowedPatterns() {
@@ -1040,7 +1060,7 @@
     if (boostTimer > 0) boostTimer -= dt;
     if (jumpLock > 0) jumpLock -= dt;
     dayClock += dt;   // advances the day/night cycle
-    var move = speed * (boostTimer > 0 ? 1.5 : 1) * dt;   // oil slick speeds the world up
+    var move = speed * (boostTimer > 0 ? 1.5 : 1) * (slowTimer > 0 ? 0.6 : 1) * dt;   // oil speeds up, slow-mo slows down
     world.scroll += move;
     dist += move / 6;   // 6px ≈ 1 "公分"
 
@@ -1081,6 +1101,8 @@
     if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) combo = 0; }
     if (magnetTimer > 0) magnetTimer -= dt;
     if (starTimer > 0) { starTimer -= dt; invuln = Math.max(invuln, 0.12); }
+    if (doubleTimer > 0) doubleTimer -= dt;
+    if (slowTimer > 0) slowTimer -= dt;
     powerTimer -= dt;
     if (powerTimer <= 0) { spawnPower(); powerTimer = 13 + Math.random() * 7; }
 
@@ -1172,7 +1194,7 @@
             combo++; comboTimer = 2.5;
             if (it.kind === "bottle") bumpStat("bottles", 1);
             else if (it.kind === "chip") bumpStat("chips", 1);
-            var mult = 1 + Math.floor(combo / 4);
+            var mult = (1 + Math.floor(combo / 4)) * (doubleTimer > 0 ? 2 : 1);
             var gain = it.points * mult;
             score += gain; dist += gain * 0.4;
             happyFace();
@@ -1707,6 +1729,7 @@
     return sp;
   }
 
+  var POWER_COLORS = { pshield: "#5aa9ff", pmagnet: "#ff6b6b", pstar: "#ffcf33", pheart: "#ff6e8e", pmystery: "#9b6bff", px2: "#36c46a", pslow: "#7ad4ff" };
   function drawItem(it) {
     var y = it.y + Math.sin(it.bob) * 5;
     if (!coinGlow) {
@@ -1720,11 +1743,18 @@
     ctx.fillStyle = coinGlow;
     ctx.beginPath(); ctx.arc(0, 0, 34, 0, Math.PI * 2); ctx.fill();
     if (it.power) {
-      // power-ups keep the special golden coin token so they stand out
-      var spin = Math.abs(Math.cos(it.bob * 1.1)) * 0.82 + 0.18;
-      ctx.scale(spin, 1);
-      var csp = collSprite(it.kind || "chip", it.r);
-      ctx.drawImage(csp.canvas, -csp.c, -csp.c, csp.w, csp.h);
+      // each power-up is a distinct, glowing colour-coded token
+      var pcol = POWER_COLORS[it.kind] || "#ffcf33";
+      var pulse = 0.55 + 0.25 * Math.sin(it.bob * 2.6);
+      ctx.save(); ctx.globalAlpha = pulse * 0.5;
+      var pg = ctx.createRadialGradient(0, 0, it.r * 0.4, 0, 0, it.r + 20);
+      pg.addColorStop(0, pcol); pg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(0, 0, it.r + 20, 0, 6.28); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = pcol; ctx.beginPath(); ctx.arc(0, 0, it.r + 6, 0, 6.28); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, 0, it.r + 2, 0, 6.28); ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.beginPath(); ctx.arc(0, 0, it.r + 6.5, 0, 6.28); ctx.stroke();
+      drawCollIcon(it.kind, it.r);
     } else {
       // regular collectibles are cute milk bottles, gently swaying
       ctx.rotate(Math.sin(it.bob * 0.8) * 0.12);
@@ -1883,6 +1913,16 @@
       ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.font = "bold " + (s * 0.72) + "px -apple-system, sans-serif";
       ctx.fillText("?", 0, s * 0.06);
+    } else if (kind === "px2") {
+      ctx.fillStyle = "#2a9e54"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = "900 " + (s * 0.78) + "px -apple-system, sans-serif";
+      ctx.fillText("×2", 0, s * 0.08);
+    } else if (kind === "pslow") {
+      ctx.strokeStyle = "#2f8fc0"; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.36, 0, 6.28); ctx.stroke();
+      ctx.fillStyle = "#2f8fc0"; ctx.beginPath(); ctx.arc(0, 0, s * 0.06, 0, 6.28); ctx.fill();
+      ctx.lineWidth = 3; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s * 0.22); ctx.moveTo(0, 0); ctx.lineTo(s * 0.16, s * 0.04); ctx.stroke();
     } else {
       ctx.fillStyle = "#5b8def"; ctx.strokeStyle = "#2c5bb5"; ctx.lineWidth = 2;
       roundRectPath(-s * 0.3, -s * 0.3, s * 0.6, s * 0.6, s * 0.1); ctx.fill(); ctx.stroke();
