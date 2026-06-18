@@ -513,7 +513,8 @@
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
   var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer;
   var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel;
-  var birthdayBurst, runCompleted, mountIdx, perfectStreak, boostTimer, jumpLock;
+  var birthdayBurst, runCompleted, mountIdx, perfectStreak, boostTimer, jumpLock, chaser;
+  var MAMA_LINES = ["該睡覺囉～😴", "尿布要換囉！", "不可以吃地上的！", "慢一點～危險！", "回來喝奶奶 🍼", "媽媽抱抱～🤱"];
 
   best = parseInt(localStorage.getItem("baiyu_best") || "0", 10) || 0;
 
@@ -672,6 +673,7 @@
     combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9;
     coyote = 0; jumpBuf = 0; hitstop = 0; scoreShown = 0; segTimer = 1.0; segLevel = 0;
     birthdayBurst = 0; runCompleted = []; mountIdx = 0; perfectStreak = 0; boostTimer = 0; jumpLock = 0;
+    chaser = { threat: 0, anim: 0, say: "", sayT: 0 };
     coolMode = isBirthday;   // every run is a party on the real birthday
     pickFace();
     updateHUD();
@@ -1044,6 +1046,7 @@
           if (!o.dmg && o.eff === "slip") {
             // banana peel: stumble (no damage) — light-hop over it to avoid
             combo = 0; perfectStreak = 0; jumpLock = 0.45; shake = 8; sfxHit();
+            chaser.threat = Math.min(1, chaser.threat + 0.18);
             popups.push({ x: baby.x + 10, y: baby.y - 78, text: "滑倒～🍌", life: 1.0, color: "#e0a000" });
           } else if (!o.dmg && o.eff === "oil") {
             // oil slick: a risky speed-up burst
@@ -1056,6 +1059,7 @@
             showToast("護盾擋下了！🛡️");
           } else {
             hearts--; invuln = 1.1; shake = 16; flash = 1; combo = 0; perfectStreak = 0; hitstop = 0.06;
+            chaser.threat = Math.min(1, chaser.threat + 0.3);
             upsetFace();
             loseHeartFx(hearts);   // hearts already decremented = index of the heart just lost
             baby.vy = -380; baby.onGround = false;
@@ -1142,6 +1146,25 @@
       if (Math.random() < 0.18) particles.push({ x: baby.x + (Math.random() - 0.5) * 60, y: baby.y - 90, vx: (Math.random() - 0.5) * 20, vy: -30, g: 30, life: 1.4, emoji: true, ch: "🎂", sz: 22 });
     }
 
+    // 大魔王媽媽: looms closer when you keep messing up, drifts back when you do well
+    chaser.anim += dt * 10;
+    chaser.threat = Math.max(0, chaser.threat - dt * 0.07);
+    if (chaser.sayT > 0) chaser.sayT -= dt;
+    if (chaser.threat > 0.25 && chaser.sayT <= 0 && Math.random() < 0.02) {
+      chaser.say = MAMA_LINES[(Math.random() * MAMA_LINES.length) | 0]; chaser.sayT = 2.2;
+    }
+    if (chaser.threat >= 1 && invuln <= 0) {
+      chaser.threat = 0.5;
+      if (shield) { shield = false; invuln = 0.9; sfxPower(); showToast("護盾擋下媽媽的抱抱！🛡️"); }
+      else {
+        hearts--; invuln = 1.1; shake = 14; flash = 0.8; combo = 0; perfectStreak = 0;
+        loseHeartFx(hearts); upsetFace(); sfxHit(); updateHUD();
+        chaser.say = "抓到你囉～🤱"; chaser.sayT = 1.6;
+        showToast("被媽媽追到了！🤱");
+        if (hearts <= 0) { gameOver(); return; }
+      }
+    }
+
     // ambient cuteness: sky twinkles + heart trail
     if (Math.random() < 0.06) particles.push({ x: Math.random() * W, y: 40 + Math.random() * 170, vx: 0, vy: 0, g: 0, life: 0.6, color: "#ffffff", star: true, sz: 3.5 });
     if (Math.random() < 0.03) particles.push({ x: baby.x + 8, y: baby.y - 78, vx: (Math.random() - 0.5) * 20, vy: -42 - Math.random() * 28, g: -30, life: 0.95, color: "rgba(255,150,175,0.95)", heart: true, sz: 7 });
@@ -1214,6 +1237,7 @@
     drawGround();
     for (var i = 0; i < items.length; i++) drawItem(items[i]);
     for (var o = 0; o < obstacles.length; o++) drawObstacle(obstacles[o]);
+    drawChaser();
     drawBaby();
     if (shield) {
       ctx.save();
@@ -1824,6 +1848,44 @@
   }
 
   // ---------- Cute baby (canvas vector) ----------
+  // the cartoon "boss mama" who chases when 柏宇 keeps slipping up
+  function drawChaser() {
+    if (!chaser || chaser.threat <= 0.1) return;
+    var x = -150 + (baby.x - 64 + 150) * chaser.threat, y = GROUND_Y;
+    var swing = Math.sin(chaser.anim) * 9;
+    ctx.save();
+    ctx.fillStyle = "rgba(40,30,15,0.18)"; ctx.beginPath(); ctx.ellipse(x, y + 6, 28, 7, 0, 0, 6.28); ctx.fill();
+    ctx.translate(x, y); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    // running legs
+    ctx.strokeStyle = "#e8b98f"; ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(-4, -28); ctx.lineTo(-4 + swing, -2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, -28); ctx.lineTo(6 - swing, -2); ctx.stroke();
+    // dress
+    ctx.fillStyle = "#e0566b"; ctx.beginPath(); ctx.moveTo(-20, -30); ctx.lineTo(20, -30); ctx.lineTo(13, -72); ctx.lineTo(-13, -72); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.fillRect(-3, -70, 6, 38);
+    // arms reaching toward 柏宇 (to the right)
+    ctx.strokeStyle = "#f0c4a0"; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(12, -64); ctx.lineTo(36, -56 + swing * 0.3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(10, -56); ctx.lineTo(34, -48 - swing * 0.3); ctx.stroke();
+    // head + hair bun
+    ctx.fillStyle = "#f6c9a0"; ctx.beginPath(); ctx.arc(0, -84, 16, 0, 6.28); ctx.fill();
+    ctx.fillStyle = "#5a3a2a"; ctx.beginPath(); ctx.arc(0, -90, 17, Math.PI, 0); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -102, 7, 0, 6.28); ctx.fill();
+    // determined-but-loving face
+    ctx.fillStyle = "#3a2a1a"; ctx.beginPath(); ctx.arc(5, -85, 2, 0, 6.28); ctx.arc(12, -85, 2, 0, 6.28); ctx.fill();
+    ctx.fillStyle = "rgba(244,138,138,0.5)"; ctx.beginPath(); ctx.arc(9, -79, 4, 0, 6.28); ctx.fill();
+    ctx.restore();
+    // speech bubble
+    if (chaser.sayT > 0 && chaser.say) {
+      ctx.save();
+      ctx.font = "bold 16px -apple-system, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      var tw = ctx.measureText(chaser.say).width, bx = x + 8, byy = y - 112;
+      ctx.fillStyle = "rgba(255,255,255,0.95)"; roundRectPath(bx - 8, byy - 16, tw + 16, 28, 10); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(bx + 4, byy + 10); ctx.lineTo(bx + 14, byy + 10); ctx.lineTo(bx + 2, byy + 22); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#d0506a"; ctx.fillText(chaser.say, bx, byy - 1);
+      ctx.restore();
+    }
+  }
   // head anchor (local mirrored space) per mount; head radius 42 throughout
   var HEAD = {
     crawl: { hx: -26, hy: -54 }, walk: { hx: -2, hy: -80 }, walker: { hx: -2, hy: -78 },
