@@ -90,6 +90,11 @@
     padding: 12px 16px; pointer-events: none;
     font-weight: 800;
   }
+  #hearts, #score {
+    background: rgba(255,255,255,0.55); border-radius: 999px;
+    padding: 4px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  }
   #hearts { font-size: clamp(18px, 3.4vw, 26px); letter-spacing: 2px; }
   #score { font-size: clamp(16px, 3vw, 24px); color: #5a4a36; text-shadow: 0 1px 0 #fff; }
   #toast {
@@ -330,6 +335,7 @@
   var skyGrad = null, dirtGrad = null, coinGlow = null;
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
   var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer;
+  var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel;
 
   best = parseInt(localStorage.getItem("baiyu_best") || "0", 10) || 0;
 
@@ -344,6 +350,7 @@
     score = 0; dist = 0; hearts = 3; speed = BASE_SPEED;
     spawnTimer = 1.2; itemTimer = 0.7; invuln = 0; milestoneIdx = 0;
     combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9;
+    coyote = 0; jumpBuf = 0; hitstop = 0; scoreShown = 0; segTimer = 1.0; segLevel = 0;
     coolMode = false;
     pickFace();
     updateHUD();
@@ -351,17 +358,25 @@
 
   function updateHUD() {
     heartsEl.textContent = "❤️".repeat(hearts) + "🤍".repeat(Math.max(0, 3 - hearts));
-    scoreEl.textContent = Math.floor(dist) + " 公分";
+    scoreEl.textContent = Math.floor(scoreShown) + " 公分";
   }
 
   // ---------- Input ----------
   function jump() {
     if (state !== "playing") return;
-    if (baby.onGround) baby.jumps = 0;
-    if (baby.jumps >= 2) return;
+    // Coyote time: a freshly-grounded first jump is still allowed for a few
+    // frames after leaving the floor. Input buffer: if a jump can't fire yet
+    // (mid double-jump), remember it briefly so it auto-fires on landing.
+    var grounded = baby.onGround || coyote > 0;
+    if (grounded) baby.jumps = 0;
+    if (baby.jumps >= 2) { jumpBuf = 0.09; return; }
+    doJump();
+  }
+  function doJump() {
     var first = baby.jumps === 0;
     baby.vy = first ? JUMP_V : JUMP_V * 0.82;
     baby.onGround = false;
+    coyote = 0; jumpBuf = 0;
     baby.jumps++;
     baby.squash = 0.4;
     sfxJump();
@@ -450,6 +465,70 @@
     else if (p === "star") { starTimer = 5; invuln = Math.max(invuln, 5); }
   }
 
+  // ---------- Difficulty director ----------
+  // Hand-authored segments measured in "jump-gap units": obstacle dx is a
+  // multiple of the current safe spacing, so every pattern auto-stretches with
+  // speed and stays clearable (you always land before the next wall). Item dy
+  // is in pixels above the ground line. `rest` is the trailing breather (units)
+  // before the next segment begins.
+  var HI = 132, LO = 18;  // common item heights (jump vs. crawl)
+  var PATTERNS = [
+    // 0 single hop + reward overhead
+    { obs: [{ dx: 0 }], items: [{ dx: 0, dy: HI }], rest: 1.4 },
+    // 1 two hops, coin tucked between
+    { obs: [{ dx: 0 }, { dx: 1 }], items: [{ dx: 0.5, dy: LO }], rest: 1.5 },
+    // 2 coin arc, no obstacle (breather)
+    { obs: [], items: [{ dx: 0, dy: 60 }, { dx: 0.35, dy: 110 }, { dx: 0.7, dy: 110 }, { dx: 1.05, dy: 60 }], rest: 1.0 },
+    // 3 triple stair of hops, coins up high to reward jumps
+    { obs: [{ dx: 0 }, { dx: 1 }, { dx: 2 }], items: [{ dx: 0.5, dy: HI }, { dx: 1.5, dy: HI }], rest: 1.6 },
+    // 4 big single you must clear, coin sitting on top
+    { obs: [{ dx: 0, big: true }], items: [{ dx: 0, dy: HI + 10 }], rest: 1.5 },
+    // 5 gentle rest: low coins only
+    { obs: [], items: [{ dx: 0, dy: LO }, { dx: 0.5, dy: LO }, { dx: 1.0, dy: 70 }], rest: 0.9 },
+    // 6 stutter: hop, slightly longer gap, hop
+    { obs: [{ dx: 0 }, { dx: 1.4, big: true }], items: [{ dx: 0.7, dy: HI }], rest: 1.6 }
+  ];
+  // which patterns are allowed at each distance tier (ramps up the pressure)
+  function allowedPatterns() {
+    if (dist < 400)  return [0, 2, 5, 0];
+    if (dist < 1200) return [0, 1, 4, 2, 6, 5];
+    if (dist < 2500) return [1, 3, 4, 6, 0, 2];
+    return [3, 1, 6, 4, 3];
+  }
+  function jumpGap() { return Math.max(220, speed * 0.74); }  // speed-safe spacing
+  function spawnObstacleAt(x, big) {
+    var o = big ? OBSTACLES[1] : OBSTACLES[0];
+    obstacles.push({ x: x, y: GROUND_Y, w: o.w, h: o.h, kind: o.kind, name: o.name, hit: false });
+  }
+  function spawnPattern(p) {
+    var gap = jumpGap(), x0 = W + 60;
+    for (var i = 0; i < p.obs.length; i++) spawnObstacleAt(x0 + p.obs[i].dx * gap, p.obs[i].big);
+    for (var j = 0; j < p.items.length; j++) {
+      var it = p.items[j], c = COLLECTIBLES[weightedItem()];
+      items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
+    }
+    // total units this segment occupies = last obstacle/item dx + trailing rest
+    var span = p.rest;
+    for (var k = 0; k < p.obs.length; k++) span = Math.max(span, p.obs[k].dx + p.rest);
+    return span * gap / speed;  // seconds until the next segment should drop
+  }
+  function director(dt) {
+    segTimer -= dt;
+    if (segTimer <= 0) {
+      var pool = allowedPatterns();
+      var p = PATTERNS[pool[(Math.random() * pool.length) | 0]];
+      segTimer = spawnPattern(p);
+    }
+  }
+
+  function loseHeartFx(idx) {
+    // a heart shatters and flutters up from its spot in the HUD
+    var hx = 42 + idx * 30, hy = 30;
+    for (var k = 0; k < 2; k++) {
+      particles.push({ x: hx, y: hy, vx: (k ? 1 : -1) * (55 + Math.random() * 35), vy: -80 - Math.random() * 30, g: 300, life: 1.0, broken: true, half: k ? 1 : -1, sz: 11, color: "#ff5a6e" });
+    }
+  }
+
   // ---------- Particles ----------
   function burst(x, y, color) {
     for (var i = 0; i < 8; i++) {
@@ -473,6 +552,14 @@
     if (state !== "playing") return;
     var dt = Math.min((now - lastT) / 1000, 0.05);
     lastT = now;
+    // Hitstop: briefly freeze the simulation on impact for a punchy feel,
+    // but keep rendering so the freeze reads as a deliberate beat.
+    if (hitstop > 0) {
+      hitstop -= dt;
+      render();
+      requestAnimationFrame(loop);
+      return;
+    }
     update(dt);
     render();
     requestAnimationFrame(loop);
@@ -486,9 +573,20 @@
     dist += move / 6;   // 6px ≈ 1 "公分"
 
     // baby physics
+    var wasGround = baby.onGround;
     baby.vy += GRAVITY * dt;
     baby.y += baby.vy * dt;
-    if (baby.y >= GROUND_Y) { baby.y = GROUND_Y; baby.vy = 0; baby.onGround = true; baby.jumps = 0; }
+    if (baby.y >= GROUND_Y) {
+      baby.y = GROUND_Y; baby.vy = 0;
+      if (!wasGround) baby.squash = Math.max(baby.squash, 0.5);   // landing squash
+      baby.onGround = true; baby.jumps = 0;
+      if (jumpBuf > 0) doJump();                                  // buffered jump fires on landing
+    } else {
+      baby.onGround = false;
+    }
+    if (wasGround && !baby.onGround) coyote = 0.08;               // grace after leaving floor
+    if (coyote > 0) coyote -= dt;
+    if (jumpBuf > 0) jumpBuf -= dt;
     baby.anim += dt * (baby.onGround ? 10 : 4);
     if (baby.squash > 0) baby.squash = Math.max(0, baby.squash - dt * 2);
     if (invuln > 0) invuln -= dt;
@@ -501,18 +599,8 @@
     powerTimer -= dt;
     if (powerTimer <= 0) { spawnPower(); powerTimer = 13 + Math.random() * 7; }
 
-    // spawn
-    spawnTimer -= dt;
-    if (spawnTimer <= 0) {
-      spawnObstacle();
-      spawnTimer = 1.1 + Math.random() * 1.0 - (speed - BASE_SPEED) / 1400;
-      if (spawnTimer < 0.7) spawnTimer = 0.7;
-    }
-    itemTimer -= dt;
-    if (itemTimer <= 0) {
-      spawnItem();
-      itemTimer = 0.6 + Math.random() * 0.9;
-    }
+    // spawn (difficulty director: hand-authored, always-solvable segments)
+    director(dt);
 
     // move & cull obstacles
     for (var i = obstacles.length - 1; i >= 0; i--) {
@@ -536,8 +624,9 @@
             burst(baby.x, baby.y - 24, "#7cc8ff"); sfxPower();
             showToast("護盾擋下了！🛡️");
           } else {
-            hearts--; invuln = 1.1; shake = 16; flash = 1; combo = 0;
+            hearts--; invuln = 1.1; shake = 16; flash = 1; combo = 0; hitstop = 0.06;
             upsetFace();
+            loseHeartFx(hearts);   // hearts already decremented = index of the heart just lost
             baby.vy = -380; baby.onGround = false;
             burst(baby.x, baby.y - 24, "#f08a3c"); sfxHit(); updateHUD();
             showToast("哎呀！撞到" + o.name + "了 💦");
@@ -616,6 +705,9 @@
       popups[q].life -= dt; popups[q].y -= 30 * dt;
       if (popups[q].life <= 0) popups.splice(q, 1);
     }
+
+    // smooth score roll-up toward the true distance
+    scoreShown += (dist - scoreShown) * Math.min(1, dt * 7);
 
     updateHUD();
   }
@@ -814,6 +906,52 @@
     }
   }
 
+  // ---------- Offscreen sprite cache ----------
+  // The coin face and the hazard body/spikes/face are identical every frame,
+  // so we pre-render each once to a DPR-scaled offscreen canvas and blit it.
+  // Only the truly dynamic bits (coin glow + spin scale, hazard bob + pulsing
+  // outline) stay live. The vector draw helpers all reference the module-level
+  // `ctx`, so we temporarily point it at the sprite's context while baking.
+  function makeSprite(w, h) {
+    var c = document.createElement("canvas");
+    c.width = Math.ceil(w * DPR); c.height = Math.ceil(h * DPR);
+    var g = c.getContext("2d");
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    return { canvas: c, octx: g, w: w, h: h };
+  }
+  function renderToSprite(sp, fn) {
+    var prev = ctx; ctx = sp.octx;
+    ctx.save(); fn(); ctx.restore();
+    ctx = prev;
+  }
+  var coinSpr = {};
+  function collSprite(kind, r) {
+    var key = kind + "_" + r;
+    if (coinSpr[key]) return coinSpr[key];
+    var sz = (r + 7) * 2, sp = makeSprite(sz, sz);
+    renderToSprite(sp, function () {
+      ctx.translate(sz / 2, sz / 2);
+      ctx.fillStyle = "#e6a817"; ctx.beginPath(); ctx.arc(0, 0, r + 5, 0, 6.28); ctx.fill();
+      ctx.fillStyle = "#ffcf33"; ctx.beginPath(); ctx.arc(0, 0, r + 1, 0, 6.28); ctx.fill();
+      ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.strokeStyle = "#fff3b0";
+      ctx.beginPath(); ctx.arc(0, 0, r - 1, Math.PI * 1.05, Math.PI * 1.55); ctx.stroke();
+      ctx.fillStyle = "#fffbe8"; ctx.beginPath(); ctx.arc(0, 0, r * 0.66, 0, 6.28); ctx.fill();
+      drawCollIcon(kind, r);
+    });
+    sp.c = sz / 2; coinSpr[key] = sp;
+    return sp;
+  }
+  var hazSpr = {};
+  function hazardSprite(w, h) {
+    var key = w + "x" + h;
+    if (hazSpr[key]) return hazSpr[key];
+    var padX = 5, padTop = 17, padBot = 4;
+    var sp = makeSprite(w + padX * 2, h + padTop + padBot);
+    renderToSprite(sp, function () { drawHazardStatic(padX + w / 2, padTop, w, h); });
+    sp.ox = padX; sp.oTop = padTop; hazSpr[key] = sp;
+    return sp;
+  }
+
   function drawItem(it) {
     var y = it.y + Math.sin(it.bob) * 5;
     var spin = Math.abs(Math.cos(it.bob * 1.1)) * 0.82 + 0.18;  // 3D coin spin
@@ -828,18 +966,9 @@
     ctx.fillStyle = coinGlow;
     ctx.beginPath(); ctx.arc(0, 0, 34, 0, Math.PI * 2); ctx.fill();
     ctx.scale(spin, 1);
-    // outer rim + gold face
-    ctx.fillStyle = "#e6a817";
-    ctx.beginPath(); ctx.arc(0, 0, it.r + 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#ffcf33";
-    ctx.beginPath(); ctx.arc(0, 0, it.r + 1, 0, Math.PI * 2); ctx.fill();
-    // bright top-left rim highlight
-    ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.strokeStyle = "#fff3b0";
-    ctx.beginPath(); ctx.arc(0, 0, it.r - 1, Math.PI * 1.05, Math.PI * 1.55); ctx.stroke();
-    // white inset disc so the icon pops
-    ctx.fillStyle = "#fffbe8";
-    ctx.beginPath(); ctx.arc(0, 0, it.r * 0.66, 0, Math.PI * 2); ctx.fill();
-    drawCollIcon(it.kind || "bottle", it.r);
+    // pre-baked coin face (rim + gold + highlight + white disc + icon)
+    var csp = collSprite(it.kind || "bottle", it.r);
+    ctx.drawImage(csp.canvas, -csp.c, -csp.c, csp.w, csp.h);
     ctx.restore();
     // moving specular sweep
     ctx.save();
@@ -856,9 +985,20 @@
     var cx = o.x, bw = o.w, bh = o.h, topY = o.y - bh + bob;
     ctx.save();
     if (o.hit) ctx.globalAlpha = 0.45;
-    // ground shadow
+    // ground shadow (live — tracks bob/position)
     ctx.fillStyle = "rgba(40,25,10,0.28)";
     ctx.beginPath(); ctx.ellipse(cx, o.y + 5, bw * 0.55, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // pre-baked body / stripes / spikes / face
+    var hsp = hazardSprite(bw, bh);
+    ctx.drawImage(hsp.canvas, cx - bw / 2 - hsp.ox, topY - hsp.oTop, hsp.w, hsp.h);
+    // pulsing red outline (live — animates)
+    var lw = 3 + 1.6 * Math.sin(world.scroll * 0.2);
+    ctx.lineWidth = lw < 1 ? 1 : lw; ctx.strokeStyle = "rgba(235,35,35,0.9)";
+    roundRectPath(cx - bw / 2 - 2, topY + 6, bw + 4, bh - 4, 10); ctx.stroke();
+    ctx.restore();
+  }
+  // static hazard art, drawn around body-top-left reference (cx, topY) — baked into a sprite
+  function drawHazardStatic(cx, topY, bw, bh) {
     // dark body
     ctx.fillStyle = "#454c58";
     roundRectPath(cx - bw / 2, topY + 8, bw, bh - 8, 9); ctx.fill();
@@ -893,11 +1033,6 @@
     ctx.moveTo(cx - bw * 0.26, ey - bh * 0.22); ctx.lineTo(cx - bw * 0.06, ey - bh * 0.06);
     ctx.moveTo(cx + bw * 0.26, ey - bh * 0.22); ctx.lineTo(cx + bw * 0.06, ey - bh * 0.06);
     ctx.stroke();
-    // pulsing red outline
-    var lw = 3 + 1.6 * Math.sin(world.scroll * 0.2);
-    ctx.lineWidth = lw < 1 ? 1 : lw; ctx.strokeStyle = "rgba(235,35,35,0.9)";
-    roundRectPath(cx - bw / 2 - 2, topY + 6, bw + 4, bh - 4, 10); ctx.stroke();
-    ctx.restore();
   }
   // cohesive vector collectible icons (drawn at the coin centre)
   function drawCollIcon(kind, r) {
@@ -974,6 +1109,17 @@
         for (var s = 0; s < 8; s++) { var rr = (s % 2) ? 2 : (p.sz || 5.5), aa = s * Math.PI / 4; ctx.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr); }
         ctx.closePath(); ctx.fill();
         ctx.restore();
+      } else if (p.broken) {
+        // a single torn half of a heart, tumbling away from the break
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.half * (0.4 + (1 - p.life) * 1.3));
+        ctx.beginPath();
+        if (p.half < 0) ctx.rect(-p.sz * 1.3, -p.sz * 1.4, p.sz * 1.3, p.sz * 2.8);
+        else ctx.rect(0, -p.sz * 1.4, p.sz * 1.3, p.sz * 2.8);
+        ctx.clip();
+        drawHeart(0, 0, p.sz);
+        ctx.restore();
       } else if (p.heart) {
         drawHeart(p.x, p.y, p.sz || 7);
       } else if (p.confetti) {
@@ -1017,9 +1163,12 @@
     ctx.save();
     if (blink) ctx.globalAlpha = 0.55;
     var swing = Math.sin(baby.anim) * 7;
-    var squash = 1 - baby.squash * 0.35;
+    // stretch tall+thin while rising, squash short+wide on landing impact
+    var stretch = baby.onGround ? 0 : Math.max(-0.16, Math.min(0.16, -baby.vy / 4600));
+    var sy = (1 - baby.squash * 0.4) * (1 + stretch);
+    var sx = (1 + baby.squash * 0.3) * (1 - stretch * 0.6);
     ctx.translate(x, y);
-    ctx.scale(-1, squash);   // face right (direction of travel)
+    ctx.scale(-sx, sy);      // face right (direction of travel) + squash/stretch
 
     // back legs (behind body)
     ctx.lineCap = "round";
