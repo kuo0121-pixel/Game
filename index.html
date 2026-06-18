@@ -4,16 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>柏宇的爬行大冒險 🍼</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     height: 100%;
     background: #f3ead7;
-    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    font-family: "Fredoka", "ZCOOL KuaiLe", "PingFang TC", "Microsoft JhengHei", -apple-system, BlinkMacSystemFont, sans-serif;
     color: #5a4a36;
     overflow: hidden;
     touch-action: manipulation;
   }
+  .title { font-family: "ZCOOL KuaiLe", "Fredoka", "PingFang TC", "Microsoft JhengHei", sans-serif; }
   body { display: flex; align-items: center; justify-content: center; }
   #wrap {
     position: relative;
@@ -532,7 +536,7 @@
   var state = "start";  // start | playing | over
   var baby, world, items, obstacles, particles, popups, platforms;
   var shake = 0, flash = 0;
-  var skyGrad = null, dirtGrad = null, coinGlow = null;
+  var skyGrad = null, dirtGrad = null, coinGlow = null, vignette = null, topLight = null;
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
   var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer, doubleTimer, slowTimer;
   var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel, dayClock;
@@ -1353,6 +1357,20 @@
     drawPopups();
     ctx.restore();
     applyDayNight();
+    // soft vignette + top light for a finished, premium look
+    if (!vignette) {
+      vignette = ctx.createRadialGradient(W / 2, H * 0.42, H * 0.28, W / 2, H * 0.52, H * 0.95);
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(0.7, "rgba(20,15,30,0.04)");
+      vignette.addColorStop(1, "rgba(18,12,28,0.24)");
+    }
+    if (!topLight) {
+      topLight = ctx.createLinearGradient(0, 0, 0, H * 0.5);
+      topLight.addColorStop(0, "rgba(255,255,255,0.10)");
+      topLight.addColorStop(1, "rgba(255,255,255,0)");
+    }
+    ctx.fillStyle = topLight; ctx.fillRect(0, 0, W, H * 0.5);
+    ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
     if (flash > 0) {
       ctx.save();
       ctx.globalAlpha = flash * 0.5;
