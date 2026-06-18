@@ -164,6 +164,7 @@
   <div id="toast"></div>
   <div id="throwback"><div id="tbPhoto"></div><div id="tbCap"></div></div>
   <button id="muteBtn" title="音效開關">🔊</button>
+  <audio id="bgm" src="bgm.mp3" loop preload="auto"></audio>
 
   <!-- Start screen -->
   <div id="start" class="overlay">
@@ -260,6 +261,13 @@
   var overTitleEl = document.getElementById("overTitle");
   var overFaceEl  = document.getElementById("overFace");
   var muteBtn     = document.getElementById("muteBtn");
+  var bgmEl       = document.getElementById("bgm");
+  if (bgmEl) bgmEl.volume = 0.35;
+  function startBgm() {
+    if (!bgmEl || muted) return;
+    var p = bgmEl.play();
+    if (p && p.catch) p.catch(function () {});
+  }
   var missionsEl  = document.getElementById("missions");
   var overMissionsEl = document.getElementById("overMissions");
   var throwbackEl = document.getElementById("throwback");
@@ -280,6 +288,7 @@
     // iOS Safari starts the context "suspended"; it must be resumed inside a user gesture.
     if (audioCtx && audioCtx.state === "suspended") { audioCtx.resume(); }
     loadBabySfx();
+    startBgm();
   }
   // decode 柏宇's voice clips into buffers once the context exists
   var babyBuf = {}, babyLoaded = false, lastCoo = 0;
@@ -343,6 +352,7 @@
   muteBtn.addEventListener("click", function () {
     muted = !muted;
     muteBtn.textContent = muted ? "🔇" : "🔊";
+    if (bgmEl) { if (muted) bgmEl.pause(); else startBgm(); }
   });
 
   // ---------- 柏宇 photo head ----------
@@ -644,6 +654,7 @@
   document.getElementById("retryBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
 
   function startGame() {
+    ensureAudio();   // unlock audio + start BGM whether launched by tap or key
     reset();
     state = "playing";
     startScreen.classList.add("hidden");
