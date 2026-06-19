@@ -540,6 +540,14 @@
     return _handSrcs;
   }
   function isHand(im) { return !!(im && handSrcs().indexOf(im.src) >= 0); }
+  // The very first watercolour (SKYBABY_HAND[0]) is pure calligraphy "祥" with NO face —
+  // it shouldn't appear even on memory/throwback cards. Scrub it from those pools once.
+  (function () {
+    if (typeof SKYBABY_HAND === "undefined" || !SKYBABY_HAND.length) return;
+    var bad = SKYBABY_HAND[0] && SKYBABY_HAND[0].src; if (!bad) return;
+    if (typeof THROWBACK_FACES !== "undefined") THROWBACK_FACES = THROWBACK_FACES.filter(function (s) { return s !== bad; });
+    if (typeof LEVEL_TB !== "undefined") for (var k in LEVEL_TB) if (LEVEL_TB[k] && LEVEL_TB[k].pics) LEVEL_TB[k].pics = LEVEL_TB[k].pics.filter(function (s) { return s !== bad; });
+  })();
   var _skyPool = [], _skyPoolN = -1;
   function skyFacePool() {
     if (_skyPoolN !== babyImgs.length) { _skyPool = babyImgs.filter(function (im) { return !isHand(im); }); _skyPoolN = babyImgs.length; }
@@ -2007,9 +2015,20 @@
     var of1 = (world.scroll * 0.12) % 540;
     ctx.fillStyle = "#82cc63";
     for (var b = -1; b < W / 540 + 1; b++) { var xb = b * 540 - of1; hill(xb + 140, GROUND_Y, 172, 96); hill(xb + 410, GROUND_Y, 122, 66); }
+    // a few rounded trees dotted on the mid hills (depth, stays behind the action)
+    var oft = (world.scroll * 0.12) % 540;
+    for (var t = -1; t < W / 540 + 1; t++) tree(t * 540 - oft + 300, GROUND_Y - 24, 1);
     var of2 = (world.scroll * 0.4) % 380;
     ctx.fillStyle = "#3f9e44";
     for (var c = -1; c < W / 380 + 1; c++) { var xc = c * 380 - of2; bush(xc + 70, GROUND_Y, 60); bush(xc + 250, GROUND_Y, 42); }
+  }
+  function tree(cx, baseY, s) {
+    ctx.fillStyle = "#9a6a3a"; ctx.fillRect(cx - 3 * s, baseY - 18 * s, 6 * s, 20 * s);   // trunk
+    ctx.fillStyle = "#5b9b42";   // canopy
+    ctx.beginPath();
+    ctx.arc(cx, baseY - 30 * s, 17 * s, 0, 6.28); ctx.arc(cx - 13 * s, baseY - 18 * s, 12 * s, 0, 6.28); ctx.arc(cx + 13 * s, baseY - 18 * s, 12 * s, 0, 6.28);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.14)"; ctx.beginPath(); ctx.arc(cx - 5 * s, baseY - 34 * s, 6 * s, 0, 6.28); ctx.fill();
   }
   function building(x, w, h, roof) {
     var topY = GROUND_Y - h;
@@ -2105,6 +2124,13 @@
       var ty = baseY - h + t * (h / 3) - 6, hw = 26 - t * 5;
       ctx.beginPath(); ctx.moveTo(cx - hw, ty); ctx.lineTo(cx + hw, ty); ctx.lineTo(cx + hw - 8, ty - 10); ctx.lineTo(cx - hw + 8, ty - 10); ctx.closePath(); ctx.fill();
     }
+    // a little finial flag fluttering on top
+    ctx.save();
+    var flutter = Math.sin(world.scroll * 0.12 + cx) * 2;
+    ctx.fillStyle = "rgba(70,55,40,0.7)"; ctx.fillRect(cx - 1, baseY - h - 16, 2, 12);   // pole
+    ctx.fillStyle = "rgba(231,90,107,0.75)";
+    ctx.beginPath(); ctx.moveTo(cx + 1, baseY - h - 16); ctx.lineTo(cx + 11, baseY - h - 13 + flutter); ctx.lineTo(cx + 1, baseY - h - 10); ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
   function hill(cx, baseY, w, h) {
     ctx.beginPath();
