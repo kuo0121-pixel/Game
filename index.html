@@ -262,7 +262,7 @@
     </div>
     <div class="controls">
       <div class="ctl"><b>🦘 跳</b>　點畫面／空白鍵（空中再點＝二段跳）</div>
-      <div class="ctl"><b>🛝 滑行</b>　按住左下滑行鈕／↓　<b>🍼 丟奶嘴</b>　奶嘴鈕／S</div>
+      <div class="ctl"><b>🛝 滑行</b>　按住滑行鈕／↓ 鑽過紅黃<b>橫桿</b>　<b>🍼 丟奶嘴</b>　奶嘴鈕／S（可同時按）</div>
       <div class="ctl tip">撿果凍連擊、踩彈跳台、集滿 🍬 觸發 Bonus Time！邊玩邊解鎖就懂了～</div>
     </div>
     <button class="btn" id="startBtn">開始爬行！</button>
@@ -593,6 +593,8 @@
     boost:   { w: 64, h: 14, dmg: false, eff: "boost", name: "加速板" },
     // 跳/滑節奏：頭頂橫桿（站著/跳會撞，必須滑行通過）
     slidebar:{ w: 58, h: 30, dmg: true,  over: 28, name: "橫桿" },
+    bigbar:  { w: 124, h: 30, dmg: true,  over: 28, name: "長橫桿" },   // 較寬，要持續按住滑
+
     // 彈跳台：踩到彈很高，接高空果凍（set piece）
     trampoline:{ w: 52, h: 20, dmg: false, eff: "jump", name: "彈跳台" }
   };
@@ -983,9 +985,16 @@
   wrapEl.addEventListener("pointerup", releaseJump);
   wrapEl.addEventListener("pointercancel", releaseJump);
   wrapEl.addEventListener("touchend", releaseJump, { passive: true });
-  // dedicated touch buttons: throw pacifier / deploy held item
-  document.getElementById("throwBtn").addEventListener("click", function (e) { e.stopPropagation(); ensureAudio(); throwPacifier(); });
-  itemSlotEl.addEventListener("click", function (e) { e.stopPropagation(); ensureAudio(); deployHeld(); });
+  // dedicated touch buttons: throw pacifier / deploy held item — use pointerdown
+  // so they fire INSTANTLY and can be pressed at the same time as a screen-tap jump
+  // (click waited for release and failed if the finger moved at all).
+  var throwBtnEl = document.getElementById("throwBtn");
+  function throwDown(e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); ensureAudio(); throwPacifier(); }
+  throwBtnEl.addEventListener("pointerdown", throwDown);
+  throwBtnEl.addEventListener("touchstart", throwDown, { passive: false });
+  function slotDown(e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); ensureAudio(); deployHeld(); }
+  itemSlotEl.addEventListener("pointerdown", slotDown);
+  itemSlotEl.addEventListener("touchstart", slotDown, { passive: false });
   // slide button: hold to slide (touch + mouse)
   var slideBtnEl = document.getElementById("slideBtn");
   function slideDown(e) { e.stopPropagation(); if (e.cancelable) e.preventDefault(); ensureAudio(); slideStart(); }
@@ -1202,17 +1211,22 @@
     // 26 trampoline → scoop a tall jelly arc up high
     { obs: [{ dx: 0, t: "trampoline" }], items: coinArc(0.1, 1.6, 7, 230, 60), rest: 1.7 },
     // 27 trampoline over a spiker, sky jellies above
-    { obs: [{ dx: 0, t: "trampoline" }, { dx: 0.9, t: "tall" }], items: coinArc(0.1, 1.5, 6, 210, 120), rest: 1.7 }
+    { obs: [{ dx: 0, t: "trampoline" }, { dx: 0.9, t: "tall" }], items: coinArc(0.1, 1.5, 6, 210, 120), rest: 1.7 },
+    // 28 LONG bar: hold the slide all the way through, grabbing a low jelly line
+    { obs: [{ dx: 0, t: "bigbar" }], items: coinRow(-0.1, 1.1, 5, LO), rest: 1.7 },
+    // 29 slide → jump → slide weave (the core Cookie-Run rhythm)
+    { obs: [{ dx: 0, t: "slidebar" }, { dx: 1.2, t: "tall" }, { dx: 2.4, t: "slidebar" }], items: [{ dx: 0.6, dy: LO }, { dx: 1.8, dy: HI }], rest: 1.8 }
   ];
   // which patterns are allowed at each distance tier (ramps up the pressure)
   function allowedPatterns() {
     // gentle, readable ramp — one new idea at a time
-    if (dist < 600)  return [0, 2, 5, 0, 2, 8];                       // just learn to jump (hops + coin arcs)
-    if (dist < 1300) return [0, 1, 2, 5, 8, 4, 22];                   // + double hop, oil, intro the slide bar
-    if (dist < 2300) return [1, 3, 4, 6, 8, 9, 13, 14, 22, 23];       // + bigtall, banana, flyer, slide rhythm
-    if (dist < 3600) return [3, 4, 6, 7, 11, 15, 18, 21, 24, 26];     // + roller, branch, boost, trampoline
-    if (dist < 5200) return [3, 6, 7, 11, 16, 17, 19, 20, 24, 25, 26, 27];
-    return [3, 7, 11, 12, 16, 17, 19, 20, 24, 25, 26, 27];            // very high: full mix
+    if (dist < 500)  return [0, 2, 5, 0, 8];                          // just learn to jump (hops + coin arcs)
+    if (dist < 1000) return [0, 22, 2, 1, 22, 8, 5];                  // introduce the SLIDE bar right away, often
+    if (dist < 2000) return [22, 1, 23, 4, 24, 8, 22, 6, 28];         // jump/slide weave is the main rhythm
+    if (dist < 3200) return [23, 3, 24, 6, 22, 14, 25, 9, 28, 29];    // + flyer, bigtall, long bar, weave
+    if (dist < 4600) return [24, 3, 29, 6, 15, 25, 18, 28, 7, 26];    // + roller, branch, trampoline
+    if (dist < 6000) return [29, 7, 25, 11, 16, 24, 27, 28, 19, 20];  // dense weave + everything
+    return [29, 25, 7, 11, 16, 17, 24, 28, 27, 12, 20, 19];           // very high: full mix, slide-heavy
   }
   // spacing tightens with distance (0.82 -> 0.66 of a jump arc) so the late
   // game demands precise jumps while staying just barely clearable.
@@ -1305,7 +1319,7 @@
     if (boostTimer > 0) boostTimer -= dt;
     if (jumpLock > 0) jumpLock -= dt;
     dayClock += dt;   // advances the day/night cycle
-    var move = speed * (boostTimer > 0 ? 1.5 : 1) * (slowTimer > 0 ? 0.6 : 1) * dt;   // oil speeds up, slow-mo slows down
+    var move = speed * (boostTimer > 0 ? 1.5 : 1) * (slowTimer > 0 ? 0.6 : 1) * (sliding ? 1.18 : 1) * dt;   // oil speeds up, slow-mo slows down, sliding zips forward
     world.scroll += move;
     dist += move / 6;   // 6px ≈ 1 "公分"
 
@@ -2215,7 +2229,7 @@
     else if (o.type === "oil") drawOil(o);
     else if (o.type === "boost") drawBoostPad(o);
     else if (o.type === "trampoline") drawTrampoline(o);
-    else if (o.type === "slidebar") drawSlideBar(o);
+    else if (o.type === "slidebar" || o.type === "bigbar") drawSlideBar(o);
     else if (o.behav === "fly") drawFlyer(o);
     else if (o.behav === "roll") drawRoller(o);
     else drawHazard(o);
@@ -2708,17 +2722,19 @@
     var bob = lively ? Math.sin(baby.anim * 2) * 1.8 : 0;
     var lean = lively ? Math.sin(baby.anim * 2 + 1) * 0.02 : 0;
     ctx.translate(0, bob); ctx.rotate(lean);
-    // slide posture: duck down + flatten so 柏宇 visibly ducks under bars
-    if (sliding) { ctx.translate(0, 16); ctx.scale(1.14, 0.6); }
+    // slide posture: a forward belly-slide (lean forward + stretch low) — clearly a SLIDE, not a squat
+    if (sliding) { ctx.translate(-4, 22); ctx.rotate(-0.18); ctx.scale(1.28, 0.5); }
 
     if (mid === "crawl") drawCrawl(swing); else drawMount(mid, swing);
     var h = HEAD[mid] || HEAD.crawl;
-    var hdy = h.hy + Math.sin(baby.anim) * 1.5 + (sliding ? 20 : 0);   // head lowers when sliding
-    drawHeroHead(h.hx, hdy, 42);
+    var hdy = h.hy + Math.sin(baby.anim) * 1.5 + (sliding ? 26 : 0);   // head drops low when sliding
+    var hdx = h.hx + (sliding ? -10 : 0);                              // and leans forward
+    drawHeroHead(hdx, hdy, 42);
     ctx.restore();
-    // dust puff while sliding on the ground
-    if (sliding && state === "playing" && Math.random() < 0.5) {
-      particles.push({ x: x - 24, y: GROUND_Y, vx: -(60 + Math.random() * 50), vy: -10 - Math.random() * 20, g: 120, life: 0.35, color: "rgba(225,205,170,0.9)", sz: 3 });
+    // forward dust + speed streaks while sliding (reads as motion, not a static crouch)
+    if (sliding && state === "playing") {
+      if (Math.random() < 0.7) particles.push({ x: x - 22, y: GROUND_Y, vx: -(120 + Math.random() * 90), vy: -8 - Math.random() * 22, g: 120, life: 0.35, color: "rgba(225,205,170,0.95)", sz: 3 + Math.random() * 2 });
+      if (Math.random() < 0.5) particles.push({ x: x - 30, y: y - 14 - Math.random() * 16, vx: -(180 + Math.random() * 120), vy: 0, g: 0, life: 0.25, streak: true, sz: 3, color: "rgba(255,255,255,0.7)" });
     }
 
     // ---- hero photo head (drawn in the mirrored space; photo un-mirrored) ----
