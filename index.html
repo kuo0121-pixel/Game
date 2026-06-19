@@ -2770,17 +2770,28 @@
     // ---- hero photo head (drawn in the mirrored space; photo un-mirrored) ----
     function drawHeroHead(hx, hy, hr) {
       if (currentFace && currentFace.complete) {
-        ctx.fillStyle = "rgba(40,30,15,0.10)";
-        ctx.beginPath(); ctx.ellipse(hx + 4, hy + hr - 2, hr * 0.7, 6, 0, 0, Math.PI * 2); ctx.fill();
+        // soft contact/drop shadow
+        ctx.fillStyle = "rgba(40,28,14,0.16)";
+        ctx.beginPath(); ctx.ellipse(hx + 3, hy + hr + 1, hr * 0.8, 7, 0, 0, Math.PI * 2); ctx.fill();
+        // white base ring
         ctx.fillStyle = "#fff";
-        ctx.beginPath(); ctx.arc(hx, hy, hr + 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(hx, hy, hr + 3.5, 0, Math.PI * 2); ctx.fill();
+        // the photo (un-mirrored), clipped to the circle
         ctx.save();
         ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.clip();
-        ctx.translate(hx, hy); ctx.scale(-1, 1);
-        ctx.drawImage(currentFace, -hr, -hr, hr * 2, hr * 2);
+        ctx.save(); ctx.translate(hx, hy); ctx.scale(-1, 1); ctx.drawImage(currentFace, -hr, -hr, hr * 2, hr * 2); ctx.restore();
+        // inner shadow (depth) + top-left rim light (premium inset look)
+        var ish = ctx.createRadialGradient(hx, hy - hr * 0.15, hr * 0.5, hx, hy, hr * 1.02);
+        ish.addColorStop(0, "rgba(0,0,0,0)"); ish.addColorStop(0.78, "rgba(0,0,0,0)"); ish.addColorStop(1, "rgba(20,12,8,0.34)");
+        ctx.fillStyle = ish; ctx.fillRect(hx - hr, hy - hr, hr * 2, hr * 2);
+        ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = hr * 0.11;
+        ctx.beginPath(); ctx.arc(hx, hy, hr - hr * 0.06, Math.PI * 1.04, Math.PI * 1.62); ctx.stroke();
         ctx.restore();
-        ctx.lineWidth = 2.5; ctx.strokeStyle = "#ffcf33";
-        ctx.beginPath(); ctx.arc(hx, hy, hr + 1.5, 0, Math.PI * 2); ctx.stroke();
+        // clean double ring: thin white outer + warm gold
+        ctx.lineWidth = 1.4; ctx.strokeStyle = "rgba(255,255,255,0.95)";
+        ctx.beginPath(); ctx.arc(hx, hy, hr + 3, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 2.6; ctx.strokeStyle = "#ffce3d";
+        ctx.beginPath(); ctx.arc(hx, hy, hr + 1.4, 0, Math.PI * 2); ctx.stroke();
         if (coolMode) {
           ctx.fillStyle = "#222";
           ctx.fillRect(hx - 20, hy - 6, 16, 11); ctx.fillRect(hx + 4, hy - 6, 16, 11); ctx.fillRect(hx - 4, hy - 2, 8, 3);
