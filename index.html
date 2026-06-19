@@ -2655,7 +2655,13 @@
     bike: { hx: -4, hy: -82 }, moto: { hx: -4, hy: -76 }, car: { hx: 0, hy: -70 },
     yacht: { hx: -2, hy: -82 }, plane: { hx: -6, hy: -60 }, shuttle: { hx: 0, hy: -92 },
     ufo: { hx: 0, hy: -78 }, cloud: { hx: -2, hy: -70 },
-    lion: { hx: -2, hy: -74 }, flamingo: { hx: -4, hy: -94 }, kart: { hx: -2, hy: -64 }
+    lion: { hx: -2, hy: -80 }, flamingo: { hx: -4, hy: -96 }, kart: { hx: -2, hy: -76 }
+  };
+  // per-mount body scale — bodies were too small vs the big photo head; chunk them up
+  // (proper chibi proportion) so 柏宇 reads as sitting ON a solid mount, not floating.
+  var MSCALE = {
+    crawl: 1.18, walk: 1.3, walker: 1.34, lion: 1.42, bike: 1.34, kart: 1.36, moto: 1.36,
+    car: 1.34, flamingo: 1.42, yacht: 1.32, plane: 1.28, shuttle: 1.24, ufo: 1.28, cloud: 1.34
   };
   // tier-scaled aura colours (warms/intensifies as 柏宇 levels up)
   var AURA_COLS = ["#ffe08a", "#ffd23f", "#ffb14d", "#ff8a5c", "#ff6b9d", "#c77dff", "#7cc8ff", "#7CF5C0"];
@@ -2755,10 +2761,13 @@
     // slide posture: a forward belly-slide (lean forward + stretch low) — clearly a SLIDE, not a squat
     if (sliding) { ctx.translate(-4, 22); ctx.rotate(-0.18); ctx.scale(1.28, 0.5); }
 
+    var BS = MSCALE[mid] || 1.3;
+    ctx.save(); ctx.scale(BS, BS);
     if (mid === "crawl") drawCrawl(swing); else drawMount(mid, swing);
+    ctx.restore();
     var h = HEAD[mid] || HEAD.crawl;
-    var hdy = h.hy + Math.sin(baby.anim) * 1.5 + (sliding ? 26 : 0);   // head drops low when sliding
-    var hdx = h.hx + (sliding ? -10 : 0);                              // and leans forward
+    var hdy = h.hy * BS + Math.sin(baby.anim) * 1.5 + (sliding ? 26 : 0);   // head sits on the (now bigger) body
+    var hdx = h.hx * BS + (sliding ? -10 : 0);                              // and leans forward when sliding
     drawHeroHead(hdx, hdy, 42);
     ctx.restore();
     // forward dust + speed streaks while sliding (reads as motion, not a static crouch)
@@ -2864,6 +2873,7 @@
         ctx.fillStyle = "#fff4e0"; ctx.beginPath(); ctx.ellipse(-37, -35, 5, 4, 0, 0, 6.28); ctx.fill();  // muzzle
         ctx.fillStyle = "#3a2a1a"; ctx.beginPath(); ctx.arc(-40, -42, 1.6, 0, 6.28); ctx.arc(-32, -42, 1.6, 0, 6.28); ctx.fill(); // eyes
         ctx.fillStyle = "#d06a4a"; ctx.beginPath(); ctx.arc(-37, -37, 1.6, 0, 6.28); ctx.fill();  // nose
+        miniBody(2, -60);   // 柏宇 riding on the lion's back (connects head to mount)
       } else if (id === "flamingo") {
         // a wading flamingo (head/front = local -x); 柏宇 rides on its back
         var fp = Math.sin(world.scroll * 0.28);
@@ -2881,6 +2891,7 @@
         ctx.fillStyle = "#ff9ec2"; ctx.beginPath(); ctx.arc(-41, -94, 8, 0, 6.28); ctx.fill();   // head
         ctx.fillStyle = "#2a2a33"; ctx.beginPath(); ctx.moveTo(-47, -93); ctx.lineTo(-58, -90); ctx.lineTo(-46, -88); ctx.closePath(); ctx.fill(); // beak
         ctx.fillStyle = "#3a2a2a"; ctx.beginPath(); ctx.arc(-43, -96, 1.6, 0, 6.28); ctx.fill();  // eye
+        miniBody(4, -72);   // 柏宇 riding on the flamingo's back
       } else if (id === "bike") {
         wheel(-20, 13); wheel(20, 13);
         ctx.strokeStyle = "#e0566b"; ctx.lineWidth = 4;
@@ -2910,6 +2921,7 @@
         ctx.fillStyle = "#ffd23f"; roundRectPath(-16, -50, 34, 20, 9); ctx.fill();  // cabin
         ctx.fillStyle = "#cfeeff"; roundRectPath(-12, -47, 16, 13, 5); ctx.fill();  // window
         ctx.fillStyle = "#fff4cc"; ctx.beginPath(); ctx.arc(-30, -24, 4, 0, 6.28); ctx.fill();  // headlight (front)
+        miniBody(1, -54);   // 柏宇 in the driver's seat
       } else if (id === "yacht") {
         ctx.strokeStyle = "rgba(120,200,240,0.7)"; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(-46, -2); ctx.quadraticCurveTo(0, 6, 46, -2); ctx.stroke();  // water
@@ -2917,6 +2929,7 @@
         ctx.fillStyle = "#5fb3c9"; roundRectPath(-20, -40, 40, 24, 8); ctx.fill();  // cabin
         ctx.fillStyle = "#cfeeff"; ctx.beginPath(); ctx.arc(-8, -28, 5, 0, 6.28); ctx.arc(8, -28, 5, 0, 6.28); ctx.fill();
         ctx.fillStyle = "#e0566b"; ctx.fillRect(-2, -56, 3, 16); ctx.beginPath(); ctx.moveTo(1, -56); ctx.lineTo(14, -50); ctx.lineTo(1, -44); ctx.closePath(); ctx.fill();
+        miniBody(-2, -52);   // 柏宇 at the helm
       } else if (id === "plane") {
         ctx.fillStyle = "#eef3f7"; roundRectPath(-40, -52, 84, 26, 13); ctx.fill();   // fuselage
         ctx.fillStyle = "#9fc7e0"; ctx.beginPath(); ctx.moveTo(6, -40); ctx.lineTo(34, -16); ctx.lineTo(2, -28); ctx.closePath(); ctx.fill(); // wing
