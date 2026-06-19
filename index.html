@@ -171,6 +171,12 @@
   }
   #powerwrap.maxed #powerfill { animation: pwPulse .5s ease infinite; }
   @keyframes pwPulse { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.5)} }
+  /* Bonus 集氣條 */
+  #bonuswrap { display:flex; align-items:center; gap:5px; background:rgba(255,255,255,0.5); border-radius:999px; padding:2px 8px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+  #bonuslbl { font-size: clamp(11px,2vw,14px); }
+  #bonusbar { display:inline-block; width:clamp(60px,14vw,116px); height:6px; border-radius:999px; background:rgba(120,90,50,0.22); overflow:hidden; }
+  #bonusfill { display:block; height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,#ff9e3d,#ff5ea8,#a78bfa); transition:width .12s linear; }
+  #bonuswrap.active { animation: pwPulse .4s ease infinite; }
   #toast {
     position: absolute; top: 18%; left: 50%; transform: translateX(-50%);
     background: rgba(255,255,255,0.9); color:#6b8e4e; font-weight:800;
@@ -234,6 +240,7 @@
     <div id="scorewrap">
       <div id="score">0 公分</div>
       <div id="powerwrap"><span id="lvl">Lv.1</span><span id="powerbar"><span id="powerfill"></span></span></div>
+      <div id="bonuswrap"><span id="bonuslbl">🍬</span><span id="bonusbar"><span id="bonusfill"></span></span></div>
     </div>
     <button id="itemSlot" class="empty" title="放出道具 (E)"><span id="itemIcon"></span></button>
   </div>
@@ -258,7 +265,8 @@
       <div class="ctl"><b>滑行 🛝</b>：<b>按住</b>左下角滑行鈕／<b>↓</b>鍵 —— 鑽過頭頂<b>橫桿</b>（別跳！）</div>
       <div class="ctl"><b>丟奶嘴 🍼</b>：按奶嘴鈕／<b>S</b> 鍵 —— 打掉<b>飛飛蟲</b>與<b>滾球</b></div>
       <div class="ctl"><b>百寶袋 🎁</b>：撿到彩色<b>道具箱</b>會隨機開出道具存進左上角槽，<b>點槽或按 E</b> 放出（含 💨沖刺）</div>
-      <div class="ctl tip">🏎️ 路上有<b>加速板</b>踩了往前衝；🪰 頭頂飛飛蟲<b>別跳</b>（站著或丟奶嘴）；⚫ 滾球要<b>跳</b>過</div>
+      <div class="ctl tip">🏎️ <b>加速板</b>往前衝、🟢 <b>彈跳台</b>彈高空接<b>果凍</b>；集滿 🍬 進入 <b>Bonus Time</b> 果凍雨爆分！</div>
+      <div class="ctl tip">🪰 頭頂飛飛蟲<b>別跳</b>（站著或丟奶嘴）；⚫ 滾球要<b>跳</b>過</div>
       <div class="ctl tip">遇到<b>分岔</b>：跳上高台走冒險路（多金幣＋道具）或留地面走安全路 ✨</div>
       <div class="ctl tip">沿路升級坐騎 🦁🦩🚗，每關都有柏宇不同時期的成長回顧 📸　電腦按 <b>F</b> 全螢幕</div>
     </div>
@@ -573,6 +581,8 @@
     { kind: "toy",     points: 20, name: "玩具熊" },
     { kind: "chip",    points: 25, name: "DDIC 晶片" }
   ];
+  // colourful jelly (跑跑薄餅人式果凍連線): small points, big combo/Bonus feed
+  var JELLY = { kind: "jelly", points: 6, name: "果凍" };
   // typed hazards: tall ones need a full (held) jump, low ones a light hop;
   // banana/oil are non-damaging floor traps with their own effects.
   var HAZARDS = {
@@ -587,7 +597,9 @@
     // 原創賽車元素：加速板（踩到往前衝刺）
     boost:   { w: 64, h: 14, dmg: false, eff: "boost", name: "加速板" },
     // 跳/滑節奏：頭頂橫桿（站著/跳會撞，必須滑行通過）
-    slidebar:{ w: 58, h: 30, dmg: true,  over: 28, name: "橫桿" }
+    slidebar:{ w: 58, h: 30, dmg: true,  over: 28, name: "橫桿" },
+    // 彈跳台：踩到彈很高，接高空果凍（set piece）
+    trampoline:{ w: 52, h: 20, dmg: false, eff: "jump", name: "彈跳台" }
   };
 
   // 柏宇's ride evolves with distance (unlocked around milestones)
@@ -823,6 +835,8 @@
   var lvlEl = document.getElementById("lvl");
   var powerfillEl = document.getElementById("powerfill");
   var powerwrapEl = document.getElementById("powerwrap");
+  var bonusfillEl = document.getElementById("bonusfill");
+  var bonuswrapEl = document.getElementById("bonuswrap");
   function updateHUD() {
     heartsEl.textContent = "❤️".repeat(hearts) + "🤍".repeat(Math.max(0, 3 - hearts));
     scoreEl.textContent = Math.floor(scoreShown) + " 公分";
@@ -835,6 +849,10 @@
       var pct = nxt == null ? 100 : Math.max(0, Math.min(100, (dist - cur) / (nxt - cur) * 100));
       powerfillEl.style.width = pct + "%";
       if (powerwrapEl) powerwrapEl.classList.toggle("maxed", pct > 88);
+    }
+    if (bonusfillEl) {
+      bonusfillEl.style.width = (bonusTime > 0 ? 100 : Math.round((bonusGauge || 0) * 100)) + "%";
+      if (bonuswrapEl) bonuswrapEl.classList.toggle("active", bonusTime > 0);
     }
   }
   var ITEM_EMOJI = { shield: "🛡️", magnet: "🧲", star: "⭐", x2: "✖️", slow: "🐢", mystery: "🎁", dash: "💨" };
@@ -903,6 +921,26 @@
     showToast(msg || ("放出 " + (POWER_NAMES[p] || "道具")));
   }
   var POWER_NAMES = { shield: "護盾 🛡️", magnet: "磁鐵 🧲", star: "無敵星 ⭐", x2: "雙倍分數 ✨", slow: "慢動作 🐢", mystery: "驚喜盒 🎁", dash: "沖刺 💨" };
+  // ---- Bonus Time（跑跑薄餅人式爆獎）：集滿果凍 → 數秒無敵衝刺＋果凍雨＋分數爆漿 ----
+  function addBonus(a) {
+    if (bonusTime > 0) return;
+    bonusGauge = Math.min(1, bonusGauge + a);
+    if (bonusGauge >= 1) startBonusTime();
+  }
+  function startBonusTime() {
+    bonusGauge = 0; bonusTime = 6.5;
+    invuln = Math.max(invuln, 6.6); magnetTimer = Math.max(magnetTimer, 6.6);
+    popups.push({ x: W / 2, y: H * 0.32, text: "🍬 BONUS TIME!", life: 1.8, color: "#ff5ea8", big: true });
+    showToast("🍬 Bonus Time！果凍雨來囉～");
+    sfxFanfare(); sfxPower();
+    levelFlash = Math.max(levelFlash, 0.5);
+    var cfc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3", "#a78bfa"];
+    for (var c = 0; c < 40; c++) { var a = Math.random() * 6.28, s = 100 + Math.random() * 180; particles.push({ x: baby.x, y: baby.y - 40, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 70, g: 360, life: 1.3, confetti: true, color: cfc[(Math.random() * 6) | 0] }); }
+  }
+  function spawnJellyWave() {
+    var n = 6, y0 = GROUND_Y - 36 - Math.random() * 130;
+    for (var i = 0; i < n; i++) items.push({ x: W + 30 + i * 44, y: y0 + Math.sin(i * 0.9) * 42, r: 14, kind: "jelly", points: JELLY.points, name: JELLY.name, taken: false, bob: Math.random() * 6.28 });
+  }
   function toggleFullscreen() {
     var d = document, el = d.documentElement;
     var fs = d.fullscreenElement || d.webkitFullscreenElement;
@@ -1165,15 +1203,19 @@
     // 24 slide → jump rhythm: duck the bar, then hop the spiker
     { obs: [{ dx: 0, t: "slidebar" }, { dx: 1.25, t: "tall" }], items: [{ dx: 0, dy: LO }, { dx: 1.8, dy: HI }], rest: 1.7 },
     // 25 double bars: slide, brief stand, slide again
-    { obs: [{ dx: 0, t: "slidebar" }, { dx: 1.3, t: "slidebar" }], items: coinRow(0.55, 0.5, 2, LO), rest: 1.6 }
+    { obs: [{ dx: 0, t: "slidebar" }, { dx: 1.3, t: "slidebar" }], items: coinRow(0.55, 0.5, 2, LO), rest: 1.6 },
+    // 26 trampoline → scoop a tall jelly arc up high
+    { obs: [{ dx: 0, t: "trampoline" }], items: coinArc(0.1, 1.6, 7, 230, 60), rest: 1.7 },
+    // 27 trampoline over a spiker, sky jellies above
+    { obs: [{ dx: 0, t: "trampoline" }, { dx: 0.9, t: "tall" }], items: coinArc(0.1, 1.5, 6, 210, 120), rest: 1.7 }
   ];
   // which patterns are allowed at each distance tier (ramps up the pressure)
   function allowedPatterns() {
     if (dist < 400)  return [0, 2, 5, 8, 0];
     if (dist < 1200) return [0, 1, 4, 2, 6, 5, 8, 9, 13, 14, 22];        // intro flyer + slide bar
-    if (dist < 2500) return [1, 3, 4, 6, 8, 10, 9, 12, 13, 14, 15, 18, 21, 22, 23]; // + roller/branch/boost/slide rhythm
-    if (dist < 5000) return [3, 1, 6, 4, 7, 11, 10, 12, 9, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25];
-    return [3, 7, 6, 11, 7, 10, 12, 16, 17, 15, 19, 20, 23, 24, 25];   // very high: dense, relentless
+    if (dist < 2500) return [1, 3, 4, 6, 8, 10, 9, 12, 13, 14, 15, 18, 21, 22, 23, 26]; // + roller/branch/boost/slide/trampoline
+    if (dist < 5000) return [3, 1, 6, 4, 7, 11, 10, 12, 9, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27];
+    return [3, 7, 6, 11, 7, 10, 12, 16, 17, 15, 19, 20, 23, 24, 25, 26, 27];   // very high: dense, relentless
   }
   // spacing tightens with distance (0.82 -> 0.66 of a jump arc) so the late
   // game demands precise jumps while staying just barely clearable.
@@ -1191,8 +1233,9 @@
         // a 百寶袋 item box tucked on the high (risky) road
         items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 22, kind: "pbox", box: true, power: "box", powerName: "百寶袋", name: "百寶袋", taken: false, bob: Math.random() * 6.28 });
       } else {
-        var c = COLLECTIBLES[weightedItem()];
-        items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
+        // most trail collectibles are colourful jellies (chains), with the odd bottle/chip mixed in
+        var c = (Math.random() < 0.6) ? JELLY : COLLECTIBLES[weightedItem()];
+        items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: c.kind === "jelly" ? 14 : 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
       }
     }
     // breather shrinks with distance (up to ~55% shorter) for a relentless late game
@@ -1205,6 +1248,9 @@
   function director(dt) {
     segTimer -= dt;
     if (segTimer <= 0) {
+      if (bonusTime > 0) {   // Bonus Time: no damaging obstacles, just jelly rain to scoop up
+        spawnJellyWave(); segTimer = 0.45; return;
+      }
       var pool = allowedPatterns();
       var p = PATTERNS[pool[(Math.random() * pool.length) | 0]];
       segTimer = spawnPattern(p);
@@ -1310,6 +1356,10 @@
     if (throwCD > 0) throwCD -= dt;
     if (slideTap > 0) slideTap -= dt;
     sliding = baby.onGround && (slideHold || slideTap > 0);   // can only slide on the ground
+    if (bonusTime > 0) {
+      bonusTime -= dt; invuln = Math.max(invuln, 0.12);       // safe collecting frenzy
+      if (Math.random() < 0.6) particles.push({ x: Math.random() * W, y: -10, vx: -30, vy: 120 + Math.random() * 80, g: 40, life: 1.4, star: true, sz: 3 + Math.random() * 3, color: ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3"][(Math.random() * 5) | 0] });
+    }
     powerTimer -= dt;
     if (powerTimer <= 0) { spawnPower(); powerTimer = 13 + Math.random() * 7; }
 
@@ -1349,7 +1399,15 @@
         var ob = { x: o.x - o.w / 2, y: o.y - o.h, w: o.w, h: o.h };
         if (overlap(babyBox(), ob)) {
           o.hit = true;
-          if (!o.dmg && o.eff === "boost") {
+          if (!o.dmg && o.eff === "jump") {
+            // trampoline: launch high to reach the airborne jellies
+            o.hit = false;   // can re-trigger if you come back down on it
+            baby.vy = -1180; baby.onGround = false; baby.jumps = 1; coyote = 0;
+            baby.squash = 0.5; sfxJump();
+            particles.push({ x: o.x, y: GROUND_Y, ring: true, r0: 50, ml: 0.35, life: 0.35, vx: 0, vy: 0, g: 0, color: "rgba(120,230,160,0.9)" });
+            for (var tj = 0; tj < 8; tj++) { var ta = Math.PI + Math.random() * Math.PI; particles.push({ x: o.x, y: GROUND_Y - 6, vx: Math.cos(ta) * 90, vy: Math.sin(ta) * 90, g: 200, life: 0.4, color: "#8fe878", star: true, sz: 3 }); }
+            popups.push({ x: baby.x, y: baby.y - 70, text: "BOING! 🟢", life: 0.8, color: "#36c46a" });
+          } else if (!o.dmg && o.eff === "boost") {
             // 加速板：踩到往前衝刺（純獎勵）
             boostTimer = Math.max(boostTimer, 1.3); sfxPower();
             popups.push({ x: baby.x + 10, y: baby.y - 78, text: "加速衝刺! 💨", life: 1.0, color: "#36c46a" });
@@ -1442,14 +1500,16 @@
             combo++; comboTimer = 2.5;
             if (it.kind === "bottle") bumpStat("bottles", 1);
             else if (it.kind === "chip") bumpStat("chips", 1);
-            var mult = (1 + Math.floor(combo / 4)) * (doubleTimer > 0 ? 2 : 1);
+            var bmul = bonusTime > 0 ? 3 : 1;                       // Bonus Time triples score
+            var mult = (1 + Math.floor(combo / 4)) * (doubleTimer > 0 ? 2 : 1) * bmul;
             var gain = it.points * mult;
             score += gain; dist += gain * 0.4;
             happyFace();
-            popups.push({ x: cx, y: cy - 10, text: "+" + gain, life: 0.9, color: "#ffd23f" });
+            popups.push({ x: cx, y: cy - 10, text: "+" + gain, life: 0.9, color: it.kind === "jelly" ? "#ff7ab0" : "#ffd23f" });
             if (mult > 1) popups.push({ x: cx, y: cy - 36, text: "x" + mult + "!", life: 1.0, color: "#ff7ab0" });
             sfxCoin();
-            showToast("+" + gain + " " + it.name + "！");
+            if (it.kind !== "jelly") showToast("+" + gain + " " + it.name + "！");   // jellies don't spam toasts
+            addBonus(it.kind === "jelly" ? 0.05 : 0.04);            // fill the Bonus gauge
           }
           burst(cx, cy, it.power ? "#b39cff" : "#ffd23f");
           for (var sp = 0; sp < 6; sp++) { var sa = Math.random() * 6.28, ss = 50 + Math.random() * 100; particles.push({ x: cx, y: cy, vx: Math.cos(sa) * ss, vy: Math.sin(sa) * ss - 30, life: 0.55, color: "#fff3b0", star: true }); }
@@ -1653,6 +1713,15 @@
       lg.addColorStop(0.5, "rgba(255,200,90,0.18)");
       lg.addColorStop(1, "rgba(255,200,90,0)");
       ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+    // Bonus Time: warm pink/gold wash + a top "🍬 BONUS" ribbon shimmer
+    if (bonusTime > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.12 + 0.05 * Math.sin(world.scroll * 0.3);
+      var bgw = ctx.createLinearGradient(0, 0, 0, H);
+      bgw.addColorStop(0, "rgba(255,180,90,0.5)"); bgw.addColorStop(1, "rgba(255,110,180,0.35)");
+      ctx.fillStyle = bgw; ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
   }
@@ -2129,6 +2198,14 @@
       ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0, 0, it.r + 2, 0, 6.28); ctx.fill();
       ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.beginPath(); ctx.arc(0, 0, it.r + 6.5, 0, 6.28); ctx.stroke();
       drawCollIcon(it.kind, it.r);
+    } else if (it.kind === "jelly") {
+      // a wobbly colourful jelly (果凍連線)
+      var jh = (it.x * 3) % 360, wob = 1 + Math.sin(it.bob * 2) * 0.12;
+      ctx.scale(wob, 2 - wob);
+      ctx.fillStyle = "hsl(" + jh + ",85%,60%)";
+      roundRectPath(-it.r, -it.r, it.r * 2, it.r * 2, it.r * 0.7); ctx.fill();
+      ctx.fillStyle = "hsla(" + jh + ",90%,80%,0.9)"; roundRectPath(-it.r * 0.6, -it.r * 0.7, it.r * 0.8, it.r * 0.5, 4); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.beginPath(); ctx.arc(-it.r * 0.35, -it.r * 0.35, it.r * 0.18, 0, 6.28); ctx.fill();
     } else {
       // regular collectibles are cute milk bottles, gently swaying
       ctx.rotate(Math.sin(it.bob * 0.8) * 0.12);
@@ -2142,10 +2219,28 @@
     if (o.type === "banana") drawBanana(o);
     else if (o.type === "oil") drawOil(o);
     else if (o.type === "boost") drawBoostPad(o);
+    else if (o.type === "trampoline") drawTrampoline(o);
     else if (o.type === "slidebar") drawSlideBar(o);
     else if (o.behav === "fly") drawFlyer(o);
     else if (o.behav === "roll") drawRoller(o);
     else drawHazard(o);
+  }
+  // a bouncy trampoline pad — run/land on it to launch high
+  function drawTrampoline(o) {
+    var cx = o.x, by = o.y, w = o.w;
+    ctx.save();
+    ctx.fillStyle = "rgba(20,40,25,0.18)"; ctx.beginPath(); ctx.ellipse(cx, by + 2, w / 2, 5, 0, 0, 6.28); ctx.fill();
+    // springy legs
+    ctx.strokeStyle = "#8a531f"; ctx.lineWidth = 4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(cx - w / 2 + 6, by); ctx.lineTo(cx - w / 2 + 10, by - 12); ctx.moveTo(cx + w / 2 - 6, by); ctx.lineTo(cx + w / 2 - 10, by - 12); ctx.stroke();
+    // bouncy top with a subtle pulse
+    var sq = 1 + Math.sin(world.scroll * 0.2) * 0.08;
+    ctx.fillStyle = "#36c46a"; roundRectPath(cx - w / 2, by - 16 - (sq - 1) * 8, w, 12, 6); ctx.fill();
+    ctx.fillStyle = "#7af0a8"; roundRectPath(cx - w / 2 + 4, by - 15 - (sq - 1) * 8, w - 8, 4, 3); ctx.fill();
+    // up-arrows hint
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    for (var a = -1; a <= 1; a++) { ctx.beginPath(); ctx.moveTo(cx + a * 14, by - 22); ctx.lineTo(cx + a * 14 - 5, by - 16); ctx.lineTo(cx + a * 14 + 5, by - 16); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
   }
   // overhead hazard bar with warning stripes — slide under it (don't jump!)
   function drawSlideBar(o) {
