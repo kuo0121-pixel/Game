@@ -1512,9 +1512,12 @@
             if (it.kind === "bottle") bumpStat("bottles", 1);
             else if (it.kind === "chip") bumpStat("chips", 1);
             var bmul = bonusTime > 0 ? 3 : 1;                       // Bonus Time triples score
-            var mult = (1 + Math.floor(combo / 4)) * (doubleTimer > 0 ? 2 : 1) * bmul;
+            var cm = Math.min(6, 1 + Math.floor(combo / 4));        // combo multiplier (capped so numbers stay readable)
+            var mult = cm * (doubleTimer > 0 ? 2 : 1) * bmul;
             var gain = it.points * mult;
-            score += gain; dist += gain * 0.4;
+            // collectibles give SCORE only — distance comes from actually crawling
+            // (so big combos / Bonus Time can't rocket you through every level).
+            score += gain;
             happyFace();
             popups.push({ x: cx, y: cy - 10, text: "+" + gain, life: 0.8, color: it.kind === "jelly" ? "#ff7ab0" : "#ffd23f" });
             if (mult >= 3 && combo % 4 === 0) popups.push({ x: cx, y: cy - 36, text: "x" + mult + "!", life: 1.0, color: "#ff7ab0" });   // only flash the combo occasionally
