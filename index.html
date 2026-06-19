@@ -630,7 +630,9 @@
   // ---------- State ----------
   var state = "start";  // start | playing | over
   var baby, world, items, obstacles, particles, popups, platforms;
-  var shake = 0, flash = 0, levelFlash = 0, camZoom = 0;
+  var shake = 0, flash = 0, levelFlash = 0, camZoom = 0, dimSpot = 0;
+  var lvTimers = [];   // staged level-up beats
+  function easeOutCubic(t) { t = 1 - Math.max(0, Math.min(1, t)); return 1 - t * t * t; }
   var skyGrad = null, dirtGrad = null, coinGlow = null, vignette = null, topLight = null;
   var score, dist, hearts, speed, spawnTimer, itemTimer, invuln, milestoneIdx, best;
   var combo, comboTimer, shield, magnetTimer, starTimer, powerTimer, doubleTimer, slowTimer;
@@ -813,7 +815,8 @@
     platforms = [];
     particles = [];
     popups = [];
-    shake = 0; flash = 0; levelFlash = 0; camZoom = 0;
+    shake = 0; flash = 0; levelFlash = 0; camZoom = 0; dimSpot = 0;
+    for (var lt = 0; lt < lvTimers.length; lt++) clearTimeout(lvTimers[lt]); lvTimers = [];
     score = 0; dist = 0; hearts = 3; speed = BASE_SPEED;
     spawnTimer = 1.2; itemTimer = 0.7; invuln = 0; milestoneIdx = 0;
     combo = 0; comboTimer = 0; shield = false; magnetTimer = 0; starTimer = 0; powerTimer = 9; doubleTimer = 0; slowTimer = 0;
@@ -927,12 +930,12 @@
   function startBonusTime() {
     bonusGauge = 0; bonusTime = 6.5;
     invuln = Math.max(invuln, 6.6); magnetTimer = Math.max(magnetTimer, 6.6);
-    popups.push({ x: W / 2, y: H * 0.32, text: "🍬 BONUS TIME!", life: 1.8, color: "#ff5ea8", big: true });
-    showToast("🍬 Bonus Time！果凍雨來囉～");
-    sfxFanfare(); sfxPower();
-    levelFlash = Math.max(levelFlash, 0.5);
-    var cfc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3", "#a78bfa"];
-    for (var c = 0; c < 40; c++) { var a = Math.random() * 6.28, s = 100 + Math.random() * 180; particles.push({ x: baby.x, y: baby.y - 40, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 70, g: 360, life: 1.3, confetti: true, color: cfc[(Math.random() * 6) | 0] }); }
+    // one clean banner pop + a single ring; the reward is the *collecting*, not a confetti storm
+    popups = popups.filter(function (p) { return p.big; });
+    popups.push({ x: W / 2, y: H * 0.30, text: "🍬 BONUS TIME ×3", life: 1.6, color: "#ff5ea8", big: true });
+    particles.push({ x: baby.x, y: baby.y - 36, ring: true, r0: 90, ml: 0.5, life: 0.5, vx: 0, vy: 0, g: 0, color: "rgba(255,140,190,0.95)" });
+    sfxFanfare();
+    var bt = setTimeout(function () { sfxPower(); }, 150); lvTimers.push(bt);
   }
   function spawnJellyWave() {
     var n = 6, y0 = GROUND_Y - 36 - Math.random() * 130;
@@ -1358,7 +1361,8 @@
     if (shake > 0) shake = Math.max(0, shake - dt * 60);
     if (flash > 0) flash = Math.max(0, flash - dt * 2.5);
     if (levelFlash > 0) levelFlash = Math.max(0, levelFlash - dt * 1.6);
-    if (camZoom > 0) camZoom = Math.max(0, camZoom - dt * 0.35);
+    if (camZoom > 0) camZoom = Math.max(0, camZoom - dt * 0.6);
+    if (dimSpot > 0) dimSpot = Math.max(0, dimSpot - dt * 0.9);
     if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) combo = 0; }
     if (magnetTimer > 0) magnetTimer -= dt;
     if (starTimer > 0) { starTimer -= dt; invuln = Math.max(invuln, 0.12); }
@@ -1369,7 +1373,8 @@
     sliding = baby.onGround && (slideHold || slideTap > 0);   // can only slide on the ground
     if (bonusTime > 0) {
       bonusTime -= dt; invuln = Math.max(invuln, 0.12);       // safe collecting frenzy
-      if (Math.random() < 0.6) particles.push({ x: Math.random() * W, y: -10, vx: -30, vy: 120 + Math.random() * 80, g: 40, life: 1.4, star: true, sz: 3 + Math.random() * 3, color: ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3"][(Math.random() * 5) | 0] });
+      // a few gentle sparkles only (the jelly lane must stay the focus, not a confetti storm)
+      if (Math.random() < 0.18) particles.push({ x: Math.random() * W, y: -10, vx: -30, vy: 110 + Math.random() * 60, g: 30, life: 1.2, star: true, sz: 2.5 + Math.random() * 2, color: ["#ffd23f", "#f78fb3", "#7cc8ff"][(Math.random() * 3) | 0] });
     }
     powerTimer -= dt;
     if (powerTimer <= 0) { spawnPower(); powerTimer = 13 + Math.random() * 7; }
@@ -1551,27 +1556,30 @@
     if (mi > mountIdx) {
       mountIdx = mi;
       var mo = MOUNTS[mountIdx];
-      var tier = mountIdx, tierF = mountIdx / (MOUNTS.length - 1);   // 0..1 power level
-      // ---- escalating "POWER UP" peak moment (stronger every tier) ----
-      showToast("🎉 Lv." + (tier + 1) + " 升級坐騎：" + mo.name + " " + mo.emoji);
-      sfxFanfare(); sfxPower();
-      showLevelThrowback(mo.id);
-      hitstop = Math.max(hitstop, 0.06 + tierF * 0.07);   // freeze-frame beat
-      levelFlash = 0.5;                                    // gold screen pop
-      camZoom = 0.06 + tierF * 0.05;                       // brief camera punch-in
-      shake = Math.max(shake, 8 + tier * 1.2);
-      // expanding shockwave rings (more at higher tiers)
-      var rings = 1 + Math.min(3, Math.floor(tier / 3));
-      for (var rr = 0; rr < rings; rr++) particles.push({ x: baby.x, y: baby.y - 36, ring: true, r0: 70 + rr * 46 + tier * 6, ml: 0.6, life: 0.6, vx: 0, vy: 0, g: 0, color: rr % 2 ? "rgba(255,210,90,0.95)" : "rgba(255,255,255,0.95)" });
-      // centered POWER UP banner
-      popups.push({ x: W / 2, y: H * 0.34, text: "⚡ POWER UP! Lv." + (tier + 1), life: 1.3, color: "#ff8a3c", big: true });
-      // confetti scales with tier (capped)
+      var tier = mountIdx;
+      // ---- cinematic level-up, staged in 3 beats (director's notes): ----
+      // BEAT A — impact: freeze, one white ring, gentle push-in, dim the world to spotlight 柏宇. Nothing else.
+      hitstop = Math.max(hitstop, 0.08);
+      levelFlash = 0.45; camZoom = 0.05; dimSpot = 0.55; shake = Math.max(shake, 8);
+      particles.push({ x: baby.x, y: baby.y - 36, ring: true, r0: 90, ml: 0.55, life: 0.55, vx: 0, vy: 0, g: 0, color: "rgba(255,255,255,0.95)" });
+      sfxFanfare();
       var mc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3", "#a78bfa"];
-      var cn = Math.min(60, 24 + tier * 3);
-      for (var mf = 0; mf < cn; mf++) { var ma = Math.random() * 6.28, ms = 110 + Math.random() * 170; particles.push({ x: baby.x, y: baby.y - 60, vx: Math.cos(ma) * ms, vy: Math.sin(ma) * ms - 70, g: 340, life: 1.1 + Math.random() * 0.4, confetti: true, color: mc[(Math.random() * 6) | 0] }); }
-      // occasional tangible perk so升級不只是好看 (every ~3rd tier)
-      if (tier > 0 && tier % 3 === 0) { doubleTimer = Math.max(doubleTimer, 6); showToast("升級獎勵：雙倍分數 ×2！✨"); }
-      else if (tier > 0 && tier % 3 === 1) { magnetTimer = Math.max(magnetTimer, 5); showToast("升級獎勵：自動磁吸 🧲"); }
+      (function (tier, mo) {
+        // BEAT B (~150ms) — reveal: the hero banner pops on the dimmed frame; second stinger lands now.
+        lvTimers.push(setTimeout(function () {
+          popups = popups.filter(function (p) { return p.big; });   // clear small popups so the banner stands alone
+          popups.push({ x: W / 2, y: H * 0.34, text: "⚡ Lv." + (tier + 1) + " " + mo.name, life: 1.2, color: "#ffd23f", big: true });
+          sfxPower();
+        }, 150));
+        // BEAT C (~520ms) — release: the celebration rains down, photo card + perk arrive as the quiet payoff.
+        lvTimers.push(setTimeout(function () {
+          showToast("🎉 升級坐騎：" + mo.name + " " + mo.emoji);
+          showLevelThrowback(mo.id);
+          for (var mf = 0; mf < 22; mf++) { var ma = Math.random() * 6.28, ms = 110 + Math.random() * 150; particles.push({ x: baby.x, y: baby.y - 60, vx: Math.cos(ma) * ms, vy: Math.sin(ma) * ms - 70, g: 340, life: 1.0 + Math.random() * 0.4, confetti: true, color: mc[(Math.random() * 6) | 0] }); }
+          if (tier > 0 && tier % 3 === 0) { doubleTimer = Math.max(doubleTimer, 6); showToast("升級獎勵：雙倍分數 ×2！✨"); }
+          else if (tier > 0 && tier % 3 === 1) { magnetTimer = Math.max(magnetTimer, 5); showToast("升級獎勵：自動磁吸 🧲"); }
+        }, 520));
+      })(tier, mo);
     }
 
     // mission progress + birthday party visuals
@@ -1684,6 +1692,8 @@
     for (var o = 0; o < obstacles.length; o++) drawObstacle(obstacles[o]);
     for (var pjd = 0; pjd < projectiles.length; pjd++) drawPacifier(projectiles[pjd]);
     drawChaser();
+    // spotlight: during a level-up beat, dim the whole world so 柏宇 is the only lit thing
+    if (dimSpot > 0) { ctx.save(); ctx.globalAlpha = dimSpot * 0.6; ctx.fillStyle = "#0a0814"; ctx.fillRect(-40, -40, W + 80, H + 80); ctx.restore(); }
     drawBaby();
     if (shield) {
       ctx.save();
@@ -1729,13 +1739,15 @@
       ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
-    // Bonus Time: warm pink/gold wash + a top "🍬 BONUS" ribbon shimmer
-    if (bonusTime > 0) {
+    // Bonus Time: a warm PINK VIGNETTE only (edges tinted, centre stays crisp so the
+    // jelly lane + 柏宇 read clearly) — and never while a level flash owns the frame.
+    if (bonusTime > 0 && levelFlash <= 0 && flash <= 0) {
       ctx.save();
-      ctx.globalAlpha = 0.12 + 0.05 * Math.sin(world.scroll * 0.3);
-      var bgw = ctx.createLinearGradient(0, 0, 0, H);
-      bgw.addColorStop(0, "rgba(255,180,90,0.5)"); bgw.addColorStop(1, "rgba(255,110,180,0.35)");
-      ctx.fillStyle = bgw; ctx.fillRect(0, 0, W, H);
+      var bvg = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.34, W / 2, H * 0.55, H * 0.95);
+      ctx.globalAlpha = 0.5 + 0.12 * Math.sin(world.scroll * 0.25);
+      bvg.addColorStop(0, "rgba(255,150,200,0)");
+      bvg.addColorStop(1, "rgba(255,120,180,0.4)");
+      ctx.fillStyle = bvg; ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
   }
@@ -1811,9 +1823,12 @@
     nightF = night; warmF = warm;
   }
   function applyDayNight() {
-    if (warmF > 0.01) { ctx.fillStyle = "rgba(255,138,60," + (warmF * 0.22) + ")"; ctx.fillRect(0, 0, W, GROUND_Y + 24); }
+    // single-tint budget: fade the day/night grade out while a burst owns the frame
+    var g = 1 - Math.min(1, levelFlash * 2 + flash + (bonusTime > 0 ? 0.6 : 0));
+    if (g <= 0.02) return;
+    if (warmF > 0.01) { ctx.fillStyle = "rgba(255,138,60," + (warmF * 0.22 * g) + ")"; ctx.fillRect(0, 0, W, GROUND_Y + 24); }
     if (nightF > 0.02) {
-      ctx.fillStyle = "rgba(16,22,60," + (nightF * 0.34) + ")"; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "rgba(16,22,60," + (nightF * 0.34 * g) + ")"; ctx.fillRect(0, 0, W, H);
       if (curTheme() !== "space") {
         ctx.save(); ctx.globalAlpha = nightF;
         drawMoon();
