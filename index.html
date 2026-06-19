@@ -530,12 +530,28 @@
     startFaceEl.style.backgroundImage = "url('" + BABY_FACES[BABY_FACES.length - 1] + "')";
   }
   var faceTimer = 0;
+  // The hand-drawn watercolours carry calligraphy/text (e.g. "祥") and a couple have
+  // no clear face — they must NEVER be used as 柏宇's running head. Keep his face (and the
+  // ambient sky baby) to real photos only; the watercolours still live on the album/throwbacks.
+  var _handN = -1, _handSrcs = [];
+  function handSrcs() {
+    var H = (typeof SKYBABY_HAND !== "undefined") ? SKYBABY_HAND : [];
+    if (_handN !== H.length) { _handSrcs = H.map(function (im) { return im.src; }); _handN = H.length; }
+    return _handSrcs;
+  }
+  function isHand(im) { return !!(im && handSrcs().indexOf(im.src) >= 0); }
+  var _skyPool = [], _skyPoolN = -1;
+  function skyFacePool() {
+    if (_skyPoolN !== babyImgs.length) { _skyPool = babyImgs.filter(function (im) { return !isHand(im); }); _skyPoolN = babyImgs.length; }
+    return _skyPool;
+  }
   // shuffle-bag so every face shows once before any repeats (even distribution)
   var faceBag = [];
   function pickFace() {
     if (!babyImgs.length) return;
     if (!faceBag.length) {
-      for (var i = 0; i < babyImgs.length; i++) faceBag.push(i);
+      for (var i = 0; i < babyImgs.length; i++) if (!isHand(babyImgs[i])) faceBag.push(i);
+      if (!faceBag.length) for (var j = 0; j < babyImgs.length; j++) faceBag.push(j);   // safety net
       for (var a = faceBag.length - 1; a > 0; a--) { var b = (Math.random() * (a + 1)) | 0, t = faceBag[a]; faceBag[a] = faceBag[b]; faceBag[b] = t; }
     }
     currentFace = babyImgs[faceBag.pop()];
@@ -543,14 +559,14 @@
   function happyFace() {
     if (typeof babyHappy !== "undefined" && babyHappy.length) {
       var ok = [];
-      for (var i = 0; i < babyHappy.length; i++) if (babyHappy[i].complete) ok.push(babyHappy[i]);
+      for (var i = 0; i < babyHappy.length; i++) if (babyHappy[i].complete && !isHand(babyHappy[i])) ok.push(babyHappy[i]);
       if (ok.length) { currentFace = ok[(Math.random() * ok.length) | 0]; faceTimer = 0.7; return; }
     }
     if (babyImgs.length && HAPPY_IDX.length) { currentFace = babyImgs[HAPPY_IDX[(Math.random() * HAPPY_IDX.length) | 0]]; faceTimer = 0.7; }
   }
   function upsetFace() {
     var ok = [];
-    for (var i = 0; i < babyUpset.length; i++) if (babyUpset[i].complete) ok.push(babyUpset[i]);
+    for (var i = 0; i < babyUpset.length; i++) if (babyUpset[i].complete && !isHand(babyUpset[i])) ok.push(babyUpset[i]);
     if (ok.length) { currentFace = ok[(Math.random() * ok.length) | 0]; faceTimer = 1.2; }
   }
   function sleepyFaceSrc() {
@@ -1873,10 +1889,11 @@
         if (theme === "sky") { cloud(xd + 240, 250, 1.2, false); cloud(xd + 40, 330, 0.9, false); }
       }
       // one small 柏宇 head drifting by, very sparse (ambient charm, not clutter)
-      if (babyImgs.length) {
+      var skyPool = skyFacePool();
+      if (skyPool.length) {
         var bof = (world.scroll * 0.12) % 1600;
         for (var sb = -1; sb < W / 1600 + 1; sb++) {
-          drawSkyBaby(sb * 1600 - bof + 300, 70, 0.7, babyImgs[(sb % babyImgs.length + babyImgs.length) % babyImgs.length], golden);
+          drawSkyBaby(sb * 1600 - bof + 300, 70, 0.7, skyPool[(sb % skyPool.length + skyPool.length) % skyPool.length], golden);
         }
       }
     }
