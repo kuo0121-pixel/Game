@@ -1871,7 +1871,7 @@
     ctx.fillStyle = skyGradFor(theme);
     ctx.fillRect(0, 0, W, GROUND_Y);
 
-    if (theme === "space") { drawStars(); drawMoon(); drawPlanet(); }
+    if (theme === "space") { drawNebula(); drawStars(); drawMeteor(); drawMoon(); drawPlanet(); }
     else drawSun(theme === "heaven");
 
     if (theme === "city") drawCity();
@@ -1959,11 +1959,45 @@
     }
     ctx.globalAlpha = 1;
   }
+  // soft coloured nebula clouds drifting very slowly behind the stars
+  function drawNebula() {
+    var off = world.scroll * 0.02;
+    var blobs = [[0.22, 0.30, 150, "rgba(150,90,220,0.16)"], [0.68, 0.52, 185, "rgba(70,165,210,0.14)"], [0.46, 0.20, 120, "rgba(212,90,170,0.12)"]];
+    for (var i = 0; i < blobs.length; i++) {
+      var span = W + 400;
+      var bx = (blobs[i][0] * W - off * (0.4 + i * 0.2)) % span; if (bx < -200) bx += span;
+      var by = blobs[i][1] * GROUND_Y, R = blobs[i][2];
+      var g = ctx.createRadialGradient(bx, by, 10, bx, by, R);
+      g.addColorStop(0, blobs[i][3]); g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, R, 0, 6.28); ctx.fill();
+    }
+  }
+  // a shooting star streaks across briefly on a cycle
+  function drawMeteor() {
+    var period = 900, ph = (world.scroll % period) / period;
+    if (ph > 0.16) return;
+    var t = ph / 0.16, sx = W * 0.15 + t * W * 0.8, sy = 40 + t * 120, len = 46;
+    var g = ctx.createLinearGradient(sx, sy, sx - len, sy - len * 0.5);
+    g.addColorStop(0, "rgba(255,255,255,0.95)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.strokeStyle = g; ctx.lineWidth = 2.4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - len, sy - len * 0.5); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.beginPath(); ctx.arc(sx, sy, 2.2, 0, 6.28); ctx.fill();
+  }
   function drawPlanet() {
     var px = 150, py = 150, pr = 46;
     ctx.fillStyle = "#7c9af0"; ctx.beginPath(); ctx.arc(px, py, pr, 0, 6.28); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(px, py, pr, 0, 6.28); ctx.clip();
     ctx.fillStyle = "#9ab0f5"; ctx.beginPath(); ctx.arc(px - 12, py - 10, pr * 0.5, 0, 6.28); ctx.fill();
-    ctx.strokeStyle = "rgba(255,220,140,0.7)"; ctx.lineWidth = 4;
+    ctx.fillStyle = "rgba(95,130,225,0.5)"; ctx.fillRect(px - pr, py + 6, pr * 2, 8); ctx.fillRect(px - pr, py + 22, pr * 2, 5);  // banding
+    ctx.fillStyle = "rgba(70,95,190,0.55)";   // craters
+    ctx.beginPath(); ctx.arc(px + 14, py - 6, 6, 0, 6.28); ctx.arc(px + 4, py + 16, 4, 0, 6.28); ctx.arc(px - 18, py + 9, 5, 0, 6.28); ctx.fill();
+    var sh = ctx.createLinearGradient(px, py, px + pr, py);   // terminator shadow
+    sh.addColorStop(0, "rgba(0,0,10,0)"); sh.addColorStop(1, "rgba(10,15,45,0.5)");
+    ctx.fillStyle = sh; ctx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+    ctx.restore();
+    ctx.strokeStyle = "rgba(200,220,255,0.7)"; ctx.lineWidth = 2;   // rim light
+    ctx.beginPath(); ctx.arc(px, py, pr - 1, Math.PI * 1.05, Math.PI * 1.6); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,220,140,0.7)"; ctx.lineWidth = 4;   // ring
     ctx.save(); ctx.translate(px, py); ctx.rotate(-0.4); ctx.beginPath(); ctx.ellipse(0, 0, pr + 22, 10, 0, 0, 6.28); ctx.stroke(); ctx.restore();
   }
   function drawHills() {
@@ -1977,31 +2011,85 @@
     ctx.fillStyle = "#3f9e44";
     for (var c = -1; c < W / 380 + 1; c++) { var xc = c * 380 - of2; bush(xc + 70, GROUND_Y, 60); bush(xc + 250, GROUND_Y, 42); }
   }
-  function building(x, w, h) {
-    ctx.fillRect(x, GROUND_Y - h, w, h);
-    ctx.save(); ctx.fillStyle = "rgba(255,245,200,0.55)";
-    for (var wy = GROUND_Y - h + 14; wy < GROUND_Y - 10; wy += 22)
-      for (var wx = x + 8; wx < x + w - 10; wx += 18) ctx.fillRect(wx, wy, 9, 12);
+  function building(x, w, h, roof) {
+    var topY = GROUND_Y - h;
+    ctx.fillRect(x, topY, w, h);
+    ctx.save();
+    // parapet cap + a soft vertical light edge for form
+    ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(x, topY, w, 4);
+    ctx.fillStyle = "rgba(255,255,255,0.06)"; ctx.fillRect(x, topY, Math.min(10, w * 0.18), h);
+    // rooftop prop (water tank / antenna) reads as a real skyline
+    ctx.fillStyle = "rgba(40,50,80,0.55)";
+    if (roof === 0) { ctx.fillRect(x + w * 0.5 - 9, topY - 13, 18, 13); ctx.fillRect(x + w * 0.5 - 11, topY - 13, 22, 3); }      // water tank
+    else if (roof === 1) { ctx.fillRect(x + w * 0.5 - 1.5, topY - 20, 3, 20); ctx.fillRect(x + w * 0.5 - 8, topY - 20, 16, 2.5); } // antenna
+    // windows: a stable subset is "lit" (warm at night, dim by day)
+    var lit = 0.16 + nightF * 0.72;
+    var dayDim = 0.10 + (1 - nightF) * 0.16;
+    for (var wy = topY + 14; wy < GROUND_Y - 12; wy += 20)
+      for (var wx = x + 8; wx < x + w - 12; wx += 17) {
+        var on = ((((wx * 31 + wy * 17) >> 3) % 5) < 2);   // ~40% windows on
+        ctx.fillStyle = on ? "rgba(255,224,150," + lit + ")" : "rgba(180,200,235," + dayDim + ")";
+        ctx.fillRect(wx, wy, 9, 11);
+      }
     ctx.restore();
   }
   function drawCity() {
+    // far haze layer (slowest) — low rooftop silhouettes for depth
+    var ofF = (world.scroll * 0.04) % 480;
+    ctx.fillStyle = "#bcc6df";
+    for (var f = -1; f < W / 480 + 1; f++) {
+      var xf = f * 480 - ofF;
+      ctx.fillRect(xf + 30, GROUND_Y - 96, 70, 96); ctx.fillRect(xf + 128, GROUND_Y - 122, 56, 122);
+      ctx.fillRect(xf + 226, GROUND_Y - 84, 88, 84); ctx.fillRect(xf + 360, GROUND_Y - 108, 64, 108);
+    }
+    // mid layer — flat blocks with a couple of roof bumps
     var of0 = (world.scroll * 0.08) % 700;
-    ctx.fillStyle = "#9aa9cf";
-    for (var a = -1; a < W / 700 + 1; a++) { var xa = a * 700 - of0; ctx.fillRect(xa + 60, GROUND_Y - 150, 90, 150); ctx.fillRect(xa + 220, GROUND_Y - 200, 80, 200); ctx.fillRect(xa + 400, GROUND_Y - 130, 110, 130); }
+    for (var a = -1; a < W / 700 + 1; a++) {
+      var xa = a * 700 - of0;
+      ctx.fillStyle = "#9aa9cf";
+      ctx.fillRect(xa + 60, GROUND_Y - 150, 90, 150); ctx.fillRect(xa + 220, GROUND_Y - 200, 80, 200); ctx.fillRect(xa + 400, GROUND_Y - 130, 110, 130);
+      ctx.fillStyle = "rgba(108,122,166,0.85)";
+      ctx.fillRect(xa + 250, GROUND_Y - 214, 16, 14); ctx.fillRect(xa + 96, GROUND_Y - 163, 3, 13); ctx.fillRect(xa + 445, GROUND_Y - 142, 14, 12);
+    }
+    // near layer — full buildings with lit windows + roof props
     var of1 = (world.scroll * 0.2) % 520;
     ctx.fillStyle = "#6f7fae";
-    for (var b = -1; b < W / 520 + 1; b++) { var xb = b * 520 - of1; building(xb + 40, 84, 180); building(xb + 200, 70, 120); building(xb + 330, 96, 220); }
+    for (var b = -1; b < W / 520 + 1; b++) { var xb = b * 520 - of1; building(xb + 40, 84, 180, 0); building(xb + 200, 70, 120, 1); building(xb + 330, 96, 220, 0); }
   }
   function drawOcean() {
-    // distant islands
+    // far islands (slow, pale) for depth
+    var ofA = (world.scroll * 0.035) % 720;
+    ctx.fillStyle = "#cfe6c4";
+    for (var d = -1; d < W / 720 + 1; d++) { var xd = d * 720 - ofA; hill(xd + 120, GROUND_Y - 34, 120, 44); hill(xd + 420, GROUND_Y - 34, 90, 34); }
+    // near islands
     var of0 = (world.scroll * 0.06) % 600;
     ctx.fillStyle = "#bfe0a8";
     for (var a = -1; a < W / 600 + 1; a++) { var xa = a * 600 - of0; hill(xa + 200, GROUND_Y - 30, 150, 70); hill(xa + 470, GROUND_Y - 30, 110, 50); }
-    // glittering sea band toward the horizon
-    ctx.fillStyle = "#5fc6e8"; ctx.fillRect(0, GROUND_Y - 34, W, 34);
+    // a little sailboat drifting along the horizon
+    var sof = (world.scroll * 0.05) % 540;
+    for (var s = -1; s < W / 540 + 1; s++) sailboat(s * 540 - sof + 300, GROUND_Y - 34);
+    // sea band with depth gradient (light at horizon -> deeper toward shore)
+    var sg = ctx.createLinearGradient(0, GROUND_Y - 34, 0, GROUND_Y);
+    sg.addColorStop(0, "#7fd2ec"); sg.addColorStop(1, "#3aa6d0");
+    ctx.fillStyle = sg; ctx.fillRect(0, GROUND_Y - 34, W, 34);
+    // glittering mid waves
     ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 2;
     var wof = world.scroll * 0.5;
     for (var wv = -1; wv < W / 40 + 1; wv++) { var wx = wv * 40 - (wof % 40); ctx.beginPath(); ctx.arc(wx, GROUND_Y - 20, 7, 1.05 * Math.PI, 1.95 * Math.PI); ctx.stroke(); }
+    // foreground foam crest at the shoreline (faster parallax)
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    var fof = (world.scroll * 0.9) % 60;
+    for (var fc = -1; fc < W / 30 + 1; fc++) { var fx = fc * 30 - fof; ctx.beginPath(); ctx.arc(fx, GROUND_Y - 3, 6, Math.PI, 0); ctx.fill(); }
+  }
+  function sailboat(x, y) {
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.92)";   // main sail
+    ctx.beginPath(); ctx.moveTo(x, y - 30); ctx.lineTo(x, y - 6); ctx.lineTo(x + 16, y - 6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(231,120,120,0.85)";   // jib
+    ctx.beginPath(); ctx.moveTo(x - 2, y - 28); ctx.lineTo(x - 2, y - 8); ctx.lineTo(x - 14, y - 8); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(92,72,56,0.92)";       // hull
+    ctx.beginPath(); ctx.moveTo(x - 16, y - 6); ctx.lineTo(x + 16, y - 6); ctx.lineTo(x + 10, y + 2); ctx.lineTo(x - 10, y + 2); ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
   function drawHeavenLayers() {
     var of0 = (world.scroll * 0.07) % 520;
