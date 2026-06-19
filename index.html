@@ -185,6 +185,26 @@
   }
   #muteBtn { right:12px; }
   #fsBtn { right:56px; }
+  /* 丟奶嘴按鈕：左下角，好按 */
+  #throwBtn {
+    position:absolute; bottom:10px; left:12px; pointer-events:auto;
+    background:rgba(143,214,232,0.92); border:none; border-radius:50%;
+    width:54px; height:54px; font-size:26px; line-height:1; cursor:pointer;
+    box-shadow:0 3px 10px rgba(0,0,0,0.18); transition:transform .08s;
+  }
+  #throwBtn:active { transform:scale(0.88); }
+  #throwBtn.hidden { display:none; }
+  /* 道具槽：在愛心列旁，撿到才亮，點一下放出 */
+  #itemSlot {
+    pointer-events:auto; width:38px; height:38px; border-radius:11px; cursor:pointer;
+    border:2px dashed rgba(255,255,255,0.8); background:rgba(255,255,255,0.18);
+    display:flex; align-items:center; justify-content:center; font-size:22px; padding:0;
+    box-shadow:0 2px 6px rgba(0,0,0,0.12); transition:transform .08s;
+  }
+  #itemSlot.empty { opacity:0.5; }
+  #itemSlot.filled { border-style:solid; animation:slotPop .3s ease; }
+  #itemSlot:active { transform:scale(0.9); }
+  @keyframes slotPop { 0%{transform:scale(0.6)} 60%{transform:scale(1.15)} 100%{transform:scale(1)} }
 </style>
 </head>
 <body>
@@ -194,9 +214,11 @@
   <div id="hud" class="hidden">
     <div id="hearts">❤️❤️❤️</div>
     <div id="score">0 公分</div>
+    <button id="itemSlot" class="empty" title="放出道具 (E)"><span id="itemIcon"></span></button>
   </div>
   <div id="toast"></div>
   <div id="throwback"><div id="tbPhoto"></div><div id="tbCap"></div></div>
+  <button id="throwBtn" class="hidden" title="丟奶嘴 (↓ / S)">🍼</button>
   <button id="muteBtn" title="音效開關">🔊</button>
   <button id="fsBtn" title="全螢幕">⛶</button>
   <audio id="bgm" src="bgm.mp3" loop preload="auto"></audio>
@@ -210,12 +232,12 @@
       收集 🍼 奶瓶、🦷 固齒器、🧸 玩具，閃避紅黑色的尖刺怪 👾。
     </div>
     <div class="controls">
-      <div class="ctl">📱 手機：<b>點畫面跳</b>　💻 電腦：<b>空白鍵・↑ 跳</b></div>
-      <div class="ctl"><b>跳</b>：輕點＝小跳，<b>按住＝跳更高</b></div>
-      <div class="ctl"><b>二段跳</b>：跳到空中時<b>再點一下</b>（最多兩段！）</div>
-      <div class="ctl tip">輕點跳過地上油漬／香蕉，按住跳過高障礙 ✨</div>
-      <div class="ctl tip">沿路升級坐騎 🦁🦩🚗，每一關都有柏宇不同時期的成長回顧 📸</div>
-      <div class="ctl tip">電腦按 <b>F</b> 可切換全螢幕</div>
+      <div class="ctl"><b>跳</b>：點畫面／空白鍵・↑（輕點＝小跳，<b>按住＝跳更高</b>，空中再點＝<b>二段跳</b>）</div>
+      <div class="ctl"><b>丟奶嘴 🍼</b>：按左下角奶嘴鈕／向下滑／<b>↓・S</b> —— 打掉<b>飛飛蟲</b>與<b>滾球</b></div>
+      <div class="ctl"><b>放道具 🎁</b>：撿到的道具會存進左上角槽，<b>點槽或按 E</b> 自己挑時機放出</div>
+      <div class="ctl tip">🪰 頭頂的飛飛蟲<b>別跳</b>（站著就安全或丟奶嘴）；⚫ 滾球要<b>跳</b>過</div>
+      <div class="ctl tip">遇到<b>分岔</b>：跳上高台走冒險路（多金幣＋道具）或留地面走安全路 ✨</div>
+      <div class="ctl tip">沿路升級坐騎 🦁🦩🚗，每關都有柏宇不同時期的成長回顧 📸　電腦按 <b>F</b> 全螢幕</div>
     </div>
     <button class="btn" id="startBtn">開始爬行！</button>
     <div class="missions" id="missions"></div>
@@ -535,7 +557,10 @@
     bigtall: { w: 70, h: 56, dmg: true,  name: "大尖刺怪" },
     low:     { w: 46, h: 22, dmg: true,  name: "小尖刺" },
     banana:  { w: 42, h: 16, dmg: false, eff: "slip", name: "香蕉皮" },
-    oil:     { w: 60, h: 12, dmg: false, eff: "oil",  name: "油漬" }
+    oil:     { w: 60, h: 12, dmg: false, eff: "oil",  name: "油漬" },
+    // 會動的危險物：飛蟲在頭頂高度（站著安全、跳上去才會撞），滾球比世界更快滾來
+    flyer:   { w: 46, h: 34, dmg: true,  behav: "fly",  air: 66, name: "飛飛蟲" },
+    roller:  { w: 40, h: 40, dmg: true,  behav: "roll", name: "滾球" }
   };
 
   // 柏宇's ride evolves with distance (unlocked around milestones)
@@ -575,6 +600,7 @@
   var coyote, jumpBuf, hitstop, scoreShown, segTimer, segLevel, dayClock;
   var nightF = 0, warmF = 0;   // day/night lighting factors (computed each frame)
   var birthdayBurst, runCompleted, mountIdx, perfectStreak, boostTimer, jumpLock, chaser;
+  var projectiles, throwCD, heldItem;   // 丟奶嘴 + 主動道具（撿到先存、自己放）
   var MAMA_LINES = ["該睡覺囉～😴", "尿布要換囉！", "不可以吃地上的！", "慢一點～危險！", "回來喝奶奶 🍼", "媽媽抱抱～🤱"];
 
   best = parseInt(localStorage.getItem("baiyu_best") || "0", 10) || 0;
@@ -755,14 +781,28 @@
     coyote = 0; jumpBuf = 0; hitstop = 0; scoreShown = 0; segTimer = 1.0; segLevel = 0; dayClock = 0;
     birthdayBurst = 0; runCompleted = []; mountIdx = 0; perfectStreak = 0; boostTimer = 0; jumpLock = 0;
     chaser = { threat: 0, anim: 0, say: "", sayT: 0 };
+    projectiles = []; throwCD = 0; heldItem = null;
     coolMode = isBirthday;   // every run is a party on the real birthday
     pickFace();
     updateHUD();
+    updateItemSlot();
   }
 
   function updateHUD() {
     heartsEl.textContent = "❤️".repeat(hearts) + "🤍".repeat(Math.max(0, 3 - hearts));
     scoreEl.textContent = Math.floor(scoreShown) + " 公分";
+  }
+  var ITEM_EMOJI = { shield: "🛡️", magnet: "🧲", star: "⭐", x2: "✖️", slow: "🐢", mystery: "🎁" };
+  var itemSlotEl = document.getElementById("itemSlot");
+  var itemIconEl = document.getElementById("itemIcon");
+  function updateItemSlot() {
+    if (!itemSlotEl) return;
+    if (heldItem) {
+      itemIconEl.textContent = ITEM_EMOJI[heldItem] || "🎁";
+      itemSlotEl.classList.remove("empty"); itemSlotEl.classList.add("filled");
+    } else {
+      itemIconEl.textContent = ""; itemSlotEl.classList.add("empty"); itemSlotEl.classList.remove("filled");
+    }
   }
 
   // ---------- Input ----------
@@ -796,6 +836,24 @@
     if (!jumpCutDone && baby.vy < -180) { baby.vy *= 0.55; jumpCutDone = true; }
   }
   var jumpCutDone = true;
+  // ---- 丟奶嘴：第二招，可打掉會動的危險物 ----
+  function throwPacifier() {
+    if (state !== "playing" || throwCD > 0) return;
+    throwCD = 0.55;
+    projectiles.push({ x: baby.x + 18, y: baby.y - 56, vx: 560, vy: -120, spin: 0, life: 1.6 });
+    sfxJump();
+    for (var i = 0; i < 4; i++) particles.push({ x: baby.x + 18, y: baby.y - 56, vx: 80 + Math.random() * 60, vy: -40 + Math.random() * 30, g: 200, life: 0.3, color: "#bfe3f0", sz: 3 });
+  }
+  // ---- 主動道具：撿到先存，自己挑時機放 ----
+  function deployHeld() {
+    if (state !== "playing" || !heldItem) return;
+    var p = heldItem; heldItem = null; updateItemSlot();
+    var msg = applyPower(p === "mystery" ? "mystery" : p);
+    sfxPower();
+    burst(baby.x, baby.y - 30, "#b39cff");
+    showToast(msg || ("放出 " + (POWER_NAMES[p] || "道具")));
+  }
+  var POWER_NAMES = { shield: "護盾 🛡️", magnet: "磁鐵 🧲", star: "無敵星 ⭐", x2: "雙倍分數 ✨", slow: "慢動作 🐢", mystery: "驚喜盒 🎁" };
   function toggleFullscreen() {
     var d = document, el = d.documentElement;
     var fs = d.fullscreenElement || d.webkitFullscreenElement;
@@ -805,6 +863,8 @@
   window.addEventListener("keydown", function (e) {
     if (e.target && e.target.tagName === "INPUT") return;   // don't hijack name typing
     if (e.code === "KeyF") { e.preventDefault(); toggleFullscreen(); return; }
+    if (e.code === "ArrowDown" || e.code === "KeyS") { e.preventDefault(); if (!e.repeat) throwPacifier(); return; }
+    if (e.code === "KeyE") { e.preventDefault(); if (!e.repeat) deployHeld(); return; }
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
       e.preventDefault();
       if (e.repeat) return;   // ignore auto-repeat so holding the key can't burn both jumps
@@ -839,6 +899,16 @@
   wrapEl.addEventListener("pointerup", releaseJump);
   wrapEl.addEventListener("pointercancel", releaseJump);
   wrapEl.addEventListener("touchend", releaseJump, { passive: true });
+  // dedicated touch buttons: throw pacifier / deploy held item
+  document.getElementById("throwBtn").addEventListener("click", function (e) { e.stopPropagation(); ensureAudio(); throwPacifier(); });
+  itemSlotEl.addEventListener("click", function (e) { e.stopPropagation(); ensureAudio(); deployHeld(); });
+  // down-swipe anywhere also throws (bonus gesture; the corner button is the reliable path)
+  var swipeY = null;
+  wrapEl.addEventListener("pointerdown", function (e) { swipeY = e.clientY; });
+  wrapEl.addEventListener("pointermove", function (e) {
+    if (swipeY != null && e.clientY - swipeY > 46) { swipeY = null; throwPacifier(); }
+  });
+  wrapEl.addEventListener("pointerup", function () { swipeY = null; });
 
   document.getElementById("startBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
   document.getElementById("retryBtn").addEventListener("click", function () { ensureAudio(); startGame(); });
@@ -865,6 +935,7 @@
     overScreen.classList.add("hidden");
     if (throwbackEl) throwbackEl.classList.remove("show");
     hud.classList.remove("hidden");
+    var tb = document.getElementById("throwBtn"); if (tb) tb.classList.remove("hidden");
     if (bgmEl) { try { bgmEl.currentTime = 0; } catch (e) {} }
     startBgm();   // BGM plays only during the run
     sfxPower();
@@ -891,7 +962,11 @@
   // ---------- Spawning ----------
   function spawnObstacleAt(x, key) {
     var o = HAZARDS[key] || HAZARDS.tall;
-    obstacles.push({ x: x, y: GROUND_Y, w: o.w, h: o.h, type: key || "tall", dmg: o.dmg, eff: o.eff, name: o.name, hit: false, minGap: null });
+    // flyer floats at 柏宇's head height (its box top sits ~o.air above ground so
+    // standing is safe but a jump clips it); others rest on the ground.
+    var baseY = o.behav === "fly" ? GROUND_Y - o.air : GROUND_Y;
+    obstacles.push({ x: x, y: baseY, w: o.w, h: o.h, type: key || "tall", dmg: o.dmg, eff: o.eff,
+      behav: o.behav || null, baseY: baseY, bob: Math.random() * 6.28, spin: 0, name: o.name, hit: false, minGap: null });
   }
   function spawnItem() {
     var c = COLLECTIBLES[weightedItem()];
@@ -996,15 +1071,31 @@
     // 12 floating platform with an even coin row on top, low hazard below
     { obs: [{ dx: 0, t: "low" }], items: coinRow(0.62, 0.64, 3, 112), plats: [{ dx: 0.5, top: 100, w: 200 }], rest: 1.6 },
     // 13 stepping platform with an even coin row reward
-    { obs: [], items: coinRow(0.36, 0.5, 3, 104), plats: [{ dx: 0.3, top: 92, w: 160 }], rest: 1.5 }
+    { obs: [], items: coinRow(0.36, 0.5, 3, 104), plats: [{ dx: 0.3, top: 92, w: 160 }], rest: 1.5 },
+    // 14 flyer at head height: DON'T jump — stand still and grab the low coins
+    { obs: [{ dx: 0, t: "flyer" }], items: coinRow(0.0, 0.8, 3, LO), rest: 1.6 },
+    // 15 fast roller: a quick committed jump
+    { obs: [{ dx: 0, t: "roller" }], items: [{ dx: 0.6, dy: HI }], rest: 1.6 },
+    // 16 flyer trap: a tempting high coin sits ABOVE a flyer — resist it, take the low ones
+    { obs: [{ dx: 0.2, t: "flyer" }], items: [{ dx: 0.2, dy: HI + 16 }, { dx: 0.9, dy: LO }, { dx: 1.3, dy: LO }], rest: 1.7 },
+    // 17 roller then a hop: jump the ball, then clear a spiker
+    { obs: [{ dx: 0, t: "roller" }, { dx: 1.5, t: "tall" }], items: [{ dx: 0.8, dy: HI }], rest: 1.7 },
+    // 18 BRANCH: high road (platform + coin arc + a stored item) vs low road (two hops)
+    { obs: [{ dx: 0.5, t: "low" }, { dx: 1.4, t: "low" }],
+      items: coinArc(0.25, 1.3, 5, 150, 130).concat([{ dx: 0.75, dy: 158, power: true }]),
+      plats: [{ dx: 0.15, top: 140, w: 320 }], rest: 1.9 },
+    // 19 BRANCH: take the high platform to skip a flyer down on the ground
+    { obs: [{ dx: 0.6, t: "flyer" }],
+      items: coinRow(0.2, 1.2, 4, 152),
+      plats: [{ dx: 0.1, top: 146, w: 330 }], rest: 1.9 }
   ];
   // which patterns are allowed at each distance tier (ramps up the pressure)
   function allowedPatterns() {
     if (dist < 400)  return [0, 2, 5, 8, 0];
-    if (dist < 1200) return [0, 1, 4, 2, 6, 5, 8, 9, 13];
-    if (dist < 2500) return [1, 3, 4, 6, 8, 10, 9, 12, 13];
-    if (dist < 5000) return [3, 1, 6, 4, 7, 11, 10, 12, 9];
-    return [3, 7, 6, 11, 7, 10, 12, 3];   // very high distance: dense, relentless
+    if (dist < 1200) return [0, 1, 4, 2, 6, 5, 8, 9, 13, 14];           // intro the flyer ("don't jump")
+    if (dist < 2500) return [1, 3, 4, 6, 8, 10, 9, 12, 13, 14, 15, 18]; // + roller + a branch
+    if (dist < 5000) return [3, 1, 6, 4, 7, 11, 10, 12, 9, 15, 16, 17, 18, 19];
+    return [3, 7, 6, 11, 7, 10, 12, 16, 17, 15, 19];   // very high distance: dense, relentless
   }
   // spacing tightens with distance (0.82 -> 0.66 of a jump arc) so the late
   // game demands precise jumps while staying just barely clearable.
@@ -1017,8 +1108,19 @@
       platforms.push({ x: x0 + pl.dx * gap, y: GROUND_Y - pl.top, w: pl.w });
     }
     for (var j = 0; j < p.items.length; j++) {
-      var it = p.items[j], c = COLLECTIBLES[weightedItem()];
-      items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
+      var it = p.items[j];
+      if (it.power) {
+        // a power-up tucked on the high (risky) road — pick a non-heart so it's worth storing
+        var pp = [
+          { power: "shield", powerName: "護盾", kind: "pshield" }, { power: "magnet", powerName: "磁鐵", kind: "pmagnet" },
+          { power: "star", powerName: "無敵星", kind: "pstar" }, { power: "x2", powerName: "雙倍分數", kind: "px2" },
+          { power: "slow", powerName: "慢動作", kind: "pslow" }, { power: "mystery", powerName: "驚喜盒", kind: "pmystery" }
+        ][(Math.random() * 6) | 0];
+        items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 22, kind: pp.kind, power: pp.power, powerName: pp.powerName, name: pp.powerName, taken: false, bob: Math.random() * 6.28 });
+      } else {
+        var c = COLLECTIBLES[weightedItem()];
+        items.push({ x: x0 + it.dx * gap, y: GROUND_Y - it.dy, r: 18, kind: c.kind, points: c.points, name: c.name, taken: false, bob: Math.random() * 6.28 });
+      }
     }
     // breather shrinks with distance (up to ~55% shorter) for a relentless late game
     var rest = p.rest * (1 - Math.min(0.55, dist / 14000));
@@ -1129,6 +1231,7 @@
     if (starTimer > 0) { starTimer -= dt; invuln = Math.max(invuln, 0.12); }
     if (doubleTimer > 0) doubleTimer -= dt;
     if (slowTimer > 0) slowTimer -= dt;
+    if (throwCD > 0) throwCD -= dt;
     powerTimer -= dt;
     if (powerTimer <= 0) { spawnPower(); powerTimer = 13 + Math.random() * 7; }
 
@@ -1138,7 +1241,9 @@
     // move & cull obstacles
     for (var i = obstacles.length - 1; i >= 0; i--) {
       var o = obstacles[i];
-      o.x -= move;
+      if (o.behav === "roll") { o.x -= move * 1.7; o.spin -= (move * 1.7) / 20; }   // rolls faster than the world
+      else o.x -= move;
+      if (o.behav === "fly") { o.bob += dt * 3; o.y = o.baseY + Math.sin(o.bob) * 8; }   // gentle hover
       if (o.x + o.w < -40) { obstacles.splice(i, 1); continue; }
       // track how tightly the baby cleared this hazard (damaging ones, for Good/Perfect)
       if (o.dmg && !o.hit && !baby.onGround) {
@@ -1194,6 +1299,29 @@
       }
     }
 
+    // pacifiers: fly forward, knock out any damaging hazard they hit
+    for (var pr = projectiles.length - 1; pr >= 0; pr--) {
+      var pj = projectiles[pr];
+      pj.vy += 900 * dt;                       // slight arc
+      pj.x += (pj.vx - move) * dt; pj.y += pj.vy * dt; pj.spin += dt * 14; pj.life -= dt;
+      if (pj.life <= 0 || pj.x > W + 40 || pj.y > GROUND_Y + 10) { projectiles.splice(pr, 1); continue; }
+      var pjbox = { x: pj.x - 9, y: pj.y - 9, w: 18, h: 18 };
+      for (var oi = obstacles.length - 1; oi >= 0; oi--) {
+        var ho = obstacles[oi];
+        if (!ho.dmg || ho.hit) continue;        // only damaging hazards; peels/oil unaffected
+        if (overlap(pjbox, { x: ho.x - ho.w / 2, y: ho.y - ho.h, w: ho.w, h: ho.h })) {
+          obstacles.splice(oi, 1);
+          score += 8; dist += 3;
+          popups.push({ x: ho.x, y: ho.y - ho.h - 10, text: "+8 擊倒!", life: 0.9, color: "#36c46a" });
+          burst(ho.x, ho.y - ho.h / 2, "#ffd23f"); sfxCoin();
+          for (var hk = 0; hk < 3; hk++) particles.push({ x: ho.x, y: ho.y - ho.h / 2, vx: (Math.random() - 0.5) * 80, vy: -60 - Math.random() * 30, g: 220, life: 0.5, color: "rgba(255,150,175,0.95)", heart: true, sz: 6 });
+          bumpStat("hits", 1);
+          projectiles.splice(pr, 1);
+          break;
+        }
+      }
+    }
+
     // move & collect items
     for (var j = items.length - 1; j >= 0; j--) {
       var it = items[j];
@@ -1212,10 +1340,19 @@
         if (cx > bb.x - it.r && cx < bb.x + bb.w + it.r && cy > bb.y - it.r && cy < bb.y + bb.h + it.r) {
           it.taken = true;
           if (it.power) {
-            var pmsg = applyPower(it.power);
-            popups.push({ x: cx, y: cy - 12, text: it.powerName, life: 1.1, color: "#8b6bff" });
-            sfxPower();
-            showToast(pmsg || ("獲得 " + it.powerName));
+            if (it.power === "heart") {
+              // hearts heal on the spot (no point storing a heal)
+              var hmsg = applyPower("heart");
+              popups.push({ x: cx, y: cy - 12, text: it.powerName, life: 1.1, color: "#ff6e8e" });
+              sfxPower(); showToast(hmsg || "補滿一顆愛心 ❤️");
+            } else {
+              // everything else is STORED — deploy it yourself when you want it
+              var swapped = heldItem;
+              heldItem = it.power; updateItemSlot();
+              popups.push({ x: cx, y: cy - 12, text: "存起來了！", life: 1.1, color: "#8b6bff" });
+              sfxPower();
+              showToast("收進道具槽 " + (ITEM_EMOJI[it.power] || "🎁") + "（點槽或按 E 放出）" + (swapped ? "（換掉了上一個）" : ""));
+            }
           } else {
             combo++; comboTimer = 2.5;
             if (it.kind === "bottle") bumpStat("bottles", 1);
@@ -1315,6 +1452,7 @@
   function gameOver() {
     state = "over";
     hud.classList.add("hidden");
+    var tb = document.getElementById("throwBtn"); if (tb) tb.classList.add("hidden");
     if (bgmEl) bgmEl.pause();   // BGM stops at game over
     if (throwbackEl) throwbackEl.classList.remove("show");
     var total = Math.floor(dist);
@@ -1367,6 +1505,7 @@
     for (var pi = 0; pi < platforms.length; pi++) drawPlatform(platforms[pi]);
     for (var i = 0; i < items.length; i++) drawItem(items[i]);
     for (var o = 0; o < obstacles.length; o++) drawObstacle(obstacles[o]);
+    for (var pjd = 0; pjd < projectiles.length; pjd++) drawPacifier(projectiles[pjd]);
     drawChaser();
     drawBaby();
     if (shield) {
@@ -1836,7 +1975,52 @@
   function drawObstacle(o) {
     if (o.type === "banana") drawBanana(o);
     else if (o.type === "oil") drawOil(o);
+    else if (o.behav === "fly") drawFlyer(o);
+    else if (o.behav === "roll") drawRoller(o);
     else drawHazard(o);
+  }
+  // a little flying bug at head height — DON'T jump into it (stand still or shoot it)
+  function drawFlyer(o) {
+    var cx = o.x, cy = o.y - o.h / 2, flap = Math.sin(world.scroll * 0.5) * 0.5;
+    ctx.save();
+    if (o.hit) ctx.globalAlpha = 0.45;
+    // translucent wings (flapping)
+    ctx.fillStyle = "rgba(180,225,255,0.7)";
+    ctx.save(); ctx.translate(cx, cy - 4); ctx.rotate(-0.5 + flap); ctx.beginPath(); ctx.ellipse(-12, 0, 13, 7, 0, 0, 6.28); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(cx, cy - 4); ctx.rotate(0.5 - flap); ctx.beginPath(); ctx.ellipse(12, 0, 13, 7, 0, 0, 6.28); ctx.fill(); ctx.restore();
+    // body
+    ctx.fillStyle = "#9b6bff"; ctx.beginPath(); ctx.ellipse(cx, cy, o.w / 2 - 4, o.h / 2 - 2, 0, 0, 6.28); ctx.fill();
+    ctx.strokeStyle = "rgba(235,35,35,0.85)"; ctx.lineWidth = 2 + Math.sin(world.scroll * 0.2); ctx.stroke();
+    // grumpy eyes + antennae
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx - 6, cy - 2, 4, 0, 6.28); ctx.arc(cx + 6, cy - 2, 4, 0, 6.28); ctx.fill();
+    ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(cx - 6, cy - 1, 2, 0, 6.28); ctx.arc(cx + 6, cy - 1, 2, 0, 6.28); ctx.fill();
+    ctx.strokeStyle = "#6a3fd0"; ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(cx - 4, cy - o.h / 2 + 2); ctx.lineTo(cx - 9, cy - o.h / 2 - 6); ctx.moveTo(cx + 4, cy - o.h / 2 + 2); ctx.lineTo(cx + 9, cy - o.h / 2 - 6); ctx.stroke();
+    ctx.restore();
+  }
+  // a fast-rolling spiky ball — must be jumped (it comes at you quicker than the world)
+  function drawRoller(o) {
+    var cx = o.x, cy = o.y - o.h / 2, r = o.w / 2;
+    ctx.save();
+    if (o.hit) ctx.globalAlpha = 0.45;
+    ctx.fillStyle = "rgba(40,25,10,0.28)"; ctx.beginPath(); ctx.ellipse(cx, o.y + 4, r * 0.9, 5, 0, 0, 6.28); ctx.fill();
+    ctx.translate(cx, cy); ctx.rotate(o.spin);
+    ctx.fillStyle = "#e23b3b";
+    for (var s = 0; s < 8; s++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(4, -r - 7); ctx.lineTo(-4, -r - 7); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = "#b32a2a"; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.28); ctx.fill();
+    ctx.fillStyle = "#ffd23f"; ctx.beginPath(); ctx.arc(0, 0, r * 0.5, 0, 6.28); ctx.fill();
+    ctx.fillStyle = "#222"; ctx.fillRect(-r * 0.32, -3, r * 0.22, 6); ctx.fillRect(r * 0.1, -3, r * 0.22, 6);
+    ctx.restore();
+  }
+  // a thrown pacifier (奶嘴) projectile
+  function drawPacifier(pj) {
+    ctx.save();
+    ctx.translate(pj.x, pj.y); ctx.rotate(pj.spin);
+    ctx.fillStyle = "#8fd6e8"; ctx.beginPath(); ctx.ellipse(0, 0, 9, 7, 0, 0, 6.28); ctx.fill();   // shield
+    ctx.strokeStyle = "#5fb3c9"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#ffd23f"; ctx.beginPath(); ctx.arc(7, 0, 4, 0, 6.28); ctx.fill();              // nipple
+    ctx.strokeStyle = "#f6c9a0"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(-7, 0, 4, -1.4, 1.4); ctx.stroke();  // ring
+    ctx.restore();
   }
   function drawBanana(o) {
     var cx = o.x, by = o.y;
