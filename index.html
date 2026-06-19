@@ -631,6 +631,7 @@
   var state = "start";  // start | playing | over
   var baby, world, items, obstacles, particles, popups, platforms;
   var shake = 0, flash = 0, levelFlash = 0, camZoom = 0, dimSpot = 0;
+  var slowmo = 0, letterbox = 0, letterboxT = 0;   // bullet-time + cinematic black bars
   var lvTimers = [];   // staged level-up beats
   function easeOutCubic(t) { t = 1 - Math.max(0, Math.min(1, t)); return 1 - t * t * t; }
   var skyGrad = null, dirtGrad = null, coinGlow = null, vignette = null, topLight = null;
@@ -815,7 +816,7 @@
     platforms = [];
     particles = [];
     popups = [];
-    shake = 0; flash = 0; levelFlash = 0; camZoom = 0; dimSpot = 0;
+    shake = 0; flash = 0; levelFlash = 0; camZoom = 0; dimSpot = 0; slowmo = 0; letterbox = 0; letterboxT = 0;
     for (var lt = 0; lt < lvTimers.length; lt++) clearTimeout(lvTimers[lt]); lvTimers = [];
     score = 0; dist = 0; hearts = 3; speed = BASE_SPEED;
     spawnTimer = 1.2; itemTimer = 0.7; invuln = 0; milestoneIdx = 0;
@@ -1036,6 +1037,7 @@
     ensureAudio();   // unlock audio whether launched by tap or key
     reset();
     state = "playing";
+    camZoom = 0.1; letterbox = 1; letterboxT = 0;   // opening push-in + curtain pulling back
     startScreen.classList.add("hidden");
     overScreen.classList.add("hidden");
     if (throwbackEl) throwbackEl.classList.remove("show");
@@ -1311,6 +1313,7 @@
       requestAnimationFrame(loop);
       return;
     }
+    if (slowmo > 0) { slowmo -= dt; dt *= 0.4; }   // bullet-time on the level-up beat (world slows, render stays smooth)
     update(dt);
     render();
     requestAnimationFrame(loop);
@@ -1363,6 +1366,7 @@
     if (levelFlash > 0) levelFlash = Math.max(0, levelFlash - dt * 1.6);
     if (camZoom > 0) camZoom = Math.max(0, camZoom - dt * 0.6);
     if (dimSpot > 0) dimSpot = Math.max(0, dimSpot - dt * 0.9);
+    letterbox += (letterboxT - letterbox) * Math.min(1, dt * 8);   // ease the cinematic bars in/out
     if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) combo = 0; }
     if (magnetTimer > 0) magnetTimer -= dt;
     if (starTimer > 0) { starTimer -= dt; invuln = Math.max(invuln, 0.12); }
@@ -1558,9 +1562,10 @@
       var mo = MOUNTS[mountIdx];
       var tier = mountIdx;
       // ---- cinematic level-up, staged in 3 beats (director's notes): ----
-      // BEAT A — impact: freeze, one white ring, gentle push-in, dim the world to spotlight 柏宇. Nothing else.
-      hitstop = Math.max(hitstop, 0.08);
-      levelFlash = 0.45; camZoom = 0.05; dimSpot = 0.55; shake = Math.max(shake, 8);
+      // BEAT A — impact: tiny freeze → bullet-time, one white ring, push-in, dim + letterbox to spotlight 柏宇.
+      hitstop = Math.max(hitstop, 0.04); slowmo = Math.max(slowmo, 0.32);
+      levelFlash = 0.45; camZoom = 0.05; dimSpot = 0.55; shake = Math.max(shake, 8); letterboxT = 1;
+      lvTimers.push(setTimeout(function () { letterboxT = 0; }, 1050));   // bars retract after the beat
       particles.push({ x: baby.x, y: baby.y - 36, ring: true, r0: 90, ml: 0.55, life: 0.55, vx: 0, vy: 0, g: 0, color: "rgba(255,255,255,0.95)" });
       sfxFanfare();
       var mc = ["#ff6b6b", "#ffd23f", "#4ade80", "#5c94fc", "#f78fb3", "#a78bfa"];
@@ -1683,7 +1688,7 @@
     ctx.clearRect(0, 0, W, H);
     computeDayNight();
     ctx.save();
-    if (camZoom > 0) { ctx.translate(baby.x, baby.y - 30); ctx.scale(1 + camZoom, 1 + camZoom); ctx.translate(-baby.x, -(baby.y - 30)); }
+    if (camZoom > 0) { var cz = easeOutCubic(camZoom / 0.12) * 0.12; ctx.translate(baby.x, baby.y - 30); ctx.scale(1 + cz, 1 + cz); ctx.translate(-baby.x, -(baby.y - 30)); }
     if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
     drawBackground();
     drawGround();
@@ -1749,6 +1754,13 @@
       bvg.addColorStop(1, "rgba(255,120,180,0.4)");
       ctx.fillStyle = bvg; ctx.fillRect(0, 0, W, H);
       ctx.restore();
+    }
+    // cinematic letterbox bars (over everything) for hero beats / start / game-over
+    if (letterbox > 0.003) {
+      var bh = easeOutCubic(letterbox) * H * 0.085;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, W, bh);
+      ctx.fillRect(0, H - bh, W, bh);
     }
   }
   // faint horizontal speed lines near the edges at high speed/tier (keeps the lane clear)
