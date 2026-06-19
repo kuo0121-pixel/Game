@@ -278,41 +278,42 @@
     canvas.height = H * DPR;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   }
-  fitCanvas();
-
-  // Explicitly size the game frame to a 16:9 box that fills the viewport.
-  // Also a fallback for browsers without CSS aspect-ratio support
-  // (notably iOS Safari < 15, where #wrap would otherwise collapse to 0 height).
-  // On a portrait phone the 16:9 frame is tiny, so we rotate it 90° to fill
-  // the screen sideways. Input is "tap anywhere to jump", which is
-  // orientation-independent, so rotating the frame is safe.
-  function sizeWrap() {
+  // Size the frame to the viewport. On a PHONE we go full-bleed: the canvas's
+  // logical width adapts to the device aspect ratio so the rotated landscape
+  // frame fills the whole screen with no bars (uniform scale, no distortion,
+  // just a little more of the world visible ahead). On desktop we keep a
+  // centred 16:9 card. Input is "tap anywhere to jump", so rotating is safe.
+  function computeSize() {
     var wrap = document.getElementById("wrap");
-    var vw = window.innerWidth;
-    var vh = window.innerHeight;
+    var vw = window.innerWidth, vh = window.innerHeight;
     var portrait = vh > vw;
-    // When rotating, fit the landscape frame into the swapped dimensions.
-    var availW = portrait ? vh : vw;
-    var availH = portrait ? vw : vh;
-    var width = Math.min(880, availW);
-    var height = width * 9 / 16;
-    if (height > availH) { height = availH; width = height * 16 / 9; }
-    wrap.style.width = width + "px";
-    wrap.style.height = height + "px";
-    if (portrait) {
-      // Take it out of flex flow and center+rotate it over the whole screen.
+    var avW = portrait ? vh : vw, avH = portrait ? vw : vh;   // landscape-oriented area
+    var phone = Math.min(vw, vh) < 540;
+    if (phone) {
+      W = Math.max(880, Math.min(1600, Math.round(H * avW / avH)));   // match canvas aspect to screen
+      wrap.style.width = avW + "px";
+      wrap.style.height = avH + "px";
+      wrap.style.borderRadius = "0";
       wrap.style.position = "fixed";
-      wrap.style.left = "50%";
-      wrap.style.top = "50%";
-      wrap.style.transform = "translate(-50%, -50%) rotate(90deg)";
+      if (portrait) {
+        wrap.style.left = "50%"; wrap.style.top = "50%";
+        wrap.style.transform = "translate(-50%, -50%) rotate(90deg)";
+      } else {
+        wrap.style.left = "0"; wrap.style.top = "0"; wrap.style.transform = "";
+      }
     } else {
-      wrap.style.position = "";
-      wrap.style.left = "";
-      wrap.style.top = "";
-      wrap.style.transform = "";
+      W = 880;
+      var width = Math.min(880, vw), height = width * H / W;
+      if (height > vh) { height = vh; width = height * W / H; }
+      wrap.style.width = width + "px";
+      wrap.style.height = height + "px";
+      wrap.style.borderRadius = "";
+      wrap.style.position = ""; wrap.style.left = ""; wrap.style.top = ""; wrap.style.transform = "";
     }
+    vignette = null;   // depends on W; rebuilt lazily in render()
+    fitCanvas();
   }
-  sizeWrap();
+  computeSize();
 
   // ---------- DOM ----------
   var startScreen = document.getElementById("start");
@@ -2265,8 +2266,8 @@
   bestScoreEl.textContent = best;
   idleRender();
 
-  window.addEventListener("resize", function () { sizeWrap(); fitCanvas(); });
-  window.addEventListener("orientationchange", function () { sizeWrap(); fitCanvas(); });
+  window.addEventListener("resize", computeSize);
+  window.addEventListener("orientationchange", computeSize);
 })();
 </script>
 </body>
